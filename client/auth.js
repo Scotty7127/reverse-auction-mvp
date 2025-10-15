@@ -1,9 +1,10 @@
 // auth.js — shared authentication check for manager pages
+// Uses global apiBase defined in config.js
 // Helper: fetch with Authorization header
 window.authFetch = function(url, options = {}) {
   const token = localStorage.getItem("token");
   const headers = Object.assign({}, options.headers || {}, token ? { Authorization: "Bearer " + token } : {});
-  return fetch(url, Object.assign({}, options, { headers }));
+  return fetch(`${apiBase}${url.startsWith("/") ? "" : "/"}${url}`, Object.assign({}, options, { headers }));
 };
 (async function checkAuth() {
     //  specify allowed roles per page
@@ -41,7 +42,7 @@ window.authFetch = function(url, options = {}) {
   }
 
   try {
-    const res = await fetch("http://localhost:4000/users/me", {
+    const res = await fetch(`${apiBase}/users/me`, {
       headers: { Authorization: "Bearer " + token },
     });
 
