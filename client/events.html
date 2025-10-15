@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Events</title>
+  <!-- Bootstrap CSS -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+  <script src="/auth.js"></script>
+</head>
+<body>
+  <!-- Navbar -->
+  <nav class="navbar">
+    <div class="nav-container">
+      <a href="manager.html" class="brand">Tendersmith</a>
+      <ul class="nav-links">
+        <li><a href="manager.html">Home</a></li>
+        <li><a href="events.html">Events</a></li>
+        <li><a href="organisations.html">Organisations</a></li>
+        <li><a href="stats.html">Stats</a></li>
+        <li><a href="account.html">Account</a></li>
+      </ul>
+    </div>
+  </nav>
+
+  <main>
+    <h2>Manage Events</h2>
+    <p>Here you’ll create and schedule auction events.</p>
+
+    <section id="create-event-section">
+      <button onclick="window.location.href='create-event.html'">Create New Event</button>
+    </section>
+
+    <section id="events-list-section">
+      <h3>Upcoming Events</h3>
+      <div id="events-list"></div>
+    </section>
+  </main>
+  <footer>
+    <p>Tendersmith © 2025</p>
+  </footer>
+
+  <script>
+    const eventsList = document.getElementById('events-list');
+
+    async function loadEvents() {
+      try {
+        const res = await authFetch('http://localhost:4000/events');
+        const events = await res.json();
+
+        eventsList.innerHTML = '';
+        if (events.length === 0) {
+          eventsList.innerHTML = '<p>No events found.</p>';
+          return;
+        }
+
+        events.forEach(evt => {
+          const div = document.createElement('div');
+          div.classList.add('event-item');
+          div.innerHTML = `
+            <h4>${evt.title}</h4>
+            <p>${evt.description || ''}</p>
+            <small>
+              <strong>Organisation:</strong> ${evt.organisation_name || '-'} |
+              <strong>Category:</strong> ${evt.category_name || '-'} |
+              <strong>Start Time:</strong> ${evt.auction_time ? new Date(evt.auction_time).toLocaleString() : '-'} |
+              <strong>Currency:</strong> ${evt.currency || '-'}
+            </small>
+          `;
+          div.addEventListener('click', () => {
+            window.location.href = `event.html?id=${evt.id}`;
+          });
+          eventsList.appendChild(div);
+        });
+      } catch (err) {
+        eventsList.innerHTML = '<p>Error loading events.</p>';
+        console.error('Error fetching events:', err);
+      }
+    }
+loadEvents()
+</script>
+</script>
+  <!-- Bootstrap JS -->
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

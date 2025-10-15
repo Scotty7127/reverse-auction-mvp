@@ -1,0 +1,547 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Event Details</title>
+  <!-- Bootstrap CSS -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="style.css" />
+  <script src="/auth.js"></script>
+  <style>
+    .tabs {
+      display: flex;
+      justify-content: center;
+      background-color: #e2e2e2;
+      padding: 10px;
+      border-bottom: 1px solid #ccc;
+    }
+    .tab {
+      margin: 0 15px;
+      cursor: pointer;
+      font-weight: bold;
+      color: #007bff;
+    }
+    .tab.active {
+      text-decoration: underline;
+    }
+    .tab-content {
+      display: none;
+      padding: 20px;
+    }
+    .tab-content.active {
+      display: block;
+    }
+    .details {
+      text-align: left;
+      max-width: 600px;
+      margin: 20px auto;
+      background: white;
+      padding: 20px;
+      border-radius: 8px;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+    }
+  </style>
+</head>
+<body>
+  <!-- Navbar -->
+  <nav class="navbar">
+    <div class="nav-container">
+      <a href="manager.html" class="brand">Tendersmith</a>
+      <ul class="nav-links">
+        <li><a href="manager.html">Home</a></li>
+        <li><a href="events.html">Events</a></li>
+        <li><a href="organisations.html">Organisations</a></li>
+        <li><a href="stats.html">Stats</a></li>
+        <li><a href="account.html">Account</a></li>
+      </ul>
+    </div>
+  </nav>
+
+  <div class="tabs">
+    <div class="tab active" data-tab="overview">Overview</div>
+    <div class="tab" data-tab="lots">Lots</div>
+    <div class="tab" data-tab="lines">All Line Items</div>
+    <div class="tab" data-tab="members">Members</div>
+    <div class="tab" data-tab="docs">Docs</div>
+    <div class="tab" data-tab="pricing">Pricing</div>
+  </div>
+
+  <main>
+    <section id="overview" class="tab-content active">
+      <div class="details" id="event-details">
+        <h2>Loading event...</h2>
+      </div>
+    </section>
+
+    <section id="lots" class="tab-content">
+      <h2>Lots</h2>
+      <button id="create-lot-btn">➕ Create New Lot</button>
+      <div id="lots-list" style="margin-top: 20px;"></div>
+    </section>
+
+    <section id="lines" class="tab-content">
+      <h2>All Line Items</h2>
+      <p>All Line items from all groups will be listed here</p>
+    </section>
+
+    <section id="members" class="tab-content">
+      <h2>Members</h2>
+      <div class="details">
+        <h4>Managers</h4>
+        <div id="managerList"><p>Loading...</p></div>
+        <hr>
+        <h4>Bidders</h4>
+        <div id="bidderList"><p>Loading...</p></div>
+      </div>
+      <button id="save-members-btn" style="margin-top: 10px; background-color:#007bff;color:white;border:none;padding:10px 15px;border-radius:5px;cursor:pointer;">💾 Save Assignments</button>
+    </section>
+
+    <section id="docs" class="tab-content">
+      <h2>RFQ Management</h2>
+      <div class="details">
+        <h4>Information / Email Content</h4>
+        <textarea id="rfq-info" rows="6" placeholder="Write the email content that will be sent to bidders..."></textarea>
+        <hr>
+        <h4>Schedule</h4>
+        <div>
+          <label>Publish Date & Time:</label>
+          <input type="datetime-local" id="rfq-publish" />
+        </div>
+        <div>
+          <label>Deadline for Responses:</label>
+          <input type="datetime-local" id="rfq-deadline" />
+        </div>
+        <div>
+          <label>Reminder Time (1 day before deadline by default):</label>
+          <input type="datetime-local" id="rfq-reminder" />
+        </div>
+        <div>
+          <button id="save-rfq-btn">Save Draft</button>
+          <button id="publish-rfq-btn">Publish Now</button>
+        </div>
+      </div>
+      <div id="rfq-status"></div>
+    </section>
+
+    <section id="pricing" class="tab-content">
+      <h2>Pricing</h2>
+      <p>Monitor live bids and auction progress.</p>
+    </section>
+  </main>
+
+  <script>
+
+    // Tab switching
+    const tabs = document.querySelectorAll('.tab');
+    const contents = document.querySelectorAll('.tab-content');
+    tabs.forEach(tab => {
+      tab.addEventListener('click', () => {
+        tabs.forEach(t => t.classList.remove('active'));
+        contents.forEach(c => c.classList.remove('active'));
+        tab.classList.add('active');
+        document.getElementById(tab.dataset.tab).classList.add('active');
+      });
+    });
+
+    // Activate tab from URL parameter (?tab=lots)
+    document.addEventListener("DOMContentLoaded", () => {
+      const params = new URLSearchParams(window.location.search);
+      const tabName = params.get("tab");
+
+      if (tabName) {
+        // deactivate all tabs and contents
+        document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
+        document.querySelectorAll(".tab-content").forEach(c => c.classList.remove("active"));
+
+        // activate the tab specified in the URL
+        const activeTab = document.querySelector(`.tab[data-tab="${tabName}"]`);
+        const activeContent = document.getElementById(tabName);
+
+        if (activeTab && activeContent) {
+          activeTab.classList.add("active");
+          activeContent.classList.add("active");
+        }
+      }
+    });
+
+    // Load event details
+    async function loadEvent() {
+      const params = new URLSearchParams(window.location.search);
+      const id = params.get('id');
+      if (!id) {
+        document.getElementById('event-details').innerHTML = '<p>No event ID provided.</p>';
+        return;
+      }
+
+      try {
+        const res = await authFetch(`http://localhost:4000/events/${id}`);
+        const event = await res.json();
+
+        if (event.error) {
+          document.getElementById('event-details').innerHTML = '<p>Event not found.</p>';
+          return;
+        }
+
+        document.getElementById('event-details').innerHTML = `
+  <div style="display: flex; justify-content: space-between; align-items: start;">
+    <h2>${event.title}</h2>
+    <div style="display: flex; gap: 10px;">
+      <button id="edit-btn" style="background-color:#007bff;color:white;border:none;padding:10px 15px;border-radius:5px;cursor:pointer;">✏️ Edit Event</button>
+      <button id="delete-btn" class="delete-btn">🗑 Delete Event</button>
+    </div>
+  </div>
+  <p>${event.description || ''}</p>
+  <p><strong>Organisation:</strong> ${event.organisation_name || '-'}</p>
+  <p><strong>Category:</strong> ${event.category_name || '-'}</p>
+  <p><strong>Currency:</strong> ${event.currency || '-'}</p>
+  <p><strong>Auction Start:</strong> ${
+    event.auction_time
+      ? new Date(event.auction_time).toLocaleString(undefined, {
+          year: 'numeric',
+          month: 'short',
+          day: 'numeric',
+          hour: 'numeric',
+          minute: '2-digit',
+          hour12: true,
+          timeZoneName: 'short'
+        })
+      : '-'
+  }</p>
+  <p><strong>Support Contact:</strong> ${event.support_contact || '-'}</p>
+  <p><strong>Bid Manager:</strong> ${event.bid_manager || '-'}</p>
+  <small>Created at: ${new Date(event.created_at).toLocaleString()}</small>
+`;
+
+        const deleteBtn = document.getElementById('delete-btn');
+        const editBtn = document.getElementById('edit-btn');
+        editBtn.addEventListener('click', () => {
+          window.location.href = `create-event.html?id=${id}`;
+        });
+        deleteBtn.addEventListener('click', async () => {
+          if (!confirm('Are you sure you want to delete this event? This action cannot be undone.')) return;
+
+          try {
+            const delRes = await authFetch(`http://localhost:4000/events/${id}`, { method: 'DELETE' });
+            if (delRes.ok) {
+              alert('Event deleted successfully.');
+              window.location.href = 'events.html';
+            } else {
+              const err = await delRes.json().catch(() => ({}));
+              alert('Failed to delete event.' + (err.error ? ' ' + err.error : ''));
+            }
+          } catch (e) {
+            alert('Error deleting event: ' + e.message);
+          }
+        });
+      } catch (err) {
+        document.getElementById('event-details').innerHTML = '<p>Error loading event details.</p>';
+        console.error(err);
+      }
+    }
+
+    // Load lots for this event
+    async function loadLots(eventId) {
+      try {
+        const res = await authFetch(`http://localhost:4000/events/${eventId}/lots`);
+        const lots = await res.json();
+        const list = document.getElementById('lots-list');
+        list.innerHTML = '';
+        if (lots.length === 0) {
+          list.innerHTML = '<p>No lots yet.</p>';
+        } else {
+          lots.forEach(lot => {
+            const div = document.createElement('div');
+            div.style.border = '1px solid #ccc';
+            div.style.padding = '10px';
+            div.style.margin = '10px 0';
+            div.style.borderRadius = '6px';
+            div.innerHTML = `
+              <div style="display: flex; justify-content: space-between; align-items: center;">
+                <div>
+                  <h3 style="cursor:pointer;color:#007bff;text-decoration:underline;" onclick="window.location.href='lot.html?id=${lot.id}'">${lot.title}</h3>
+                  <p>${lot.description || ''}</p>
+                </div>
+                <button onclick="window.location.href='create-lot.html?event_id=${eventId}&lot_id=${lot.id}'" style="background-color:#007bff;color:white;border:none;padding:6px 10px;border-radius:4px;cursor:pointer;">✏️ Edit</button>
+              </div>
+            `;
+            list.appendChild(div);
+          });
+        }
+      } catch (err) {
+        console.error('Error loading lots:', err);
+        document.getElementById('lots-list').innerHTML = '<p>Error loading lots.</p>';
+      }
+    }
+
+    // Load all line items for this event (from all lots), render as one table with grouped headers and horizontal scroll
+    async function loadAllLineItems(eventId) {
+      try {
+        const res = await authFetch(`http://localhost:4000/events/${eventId}/line-items`);
+        const items = await res.json();
+        const container = document.getElementById('lines');
+        container.innerHTML = '<h2>All Line Items</h2><p>All Line items from all groups will be listed here</p>';
+
+        if (!Array.isArray(items) || items.length === 0) {
+          container.innerHTML += '<p>No line items found.</p>';
+          return;
+        }
+
+        // Table setup
+        // Grouped header structure (same as in lot.html):
+        // Core Info (7), Bid Settings (6), Evaluative Settings (5), Bid Interface Visibility (3)
+        // Column order:
+        //   Core Info: Lot, Item Number, Item Name, Group Number, Description, Quantity, UOM
+        //   Bid Settings: Input, Required, Ties, Decimals, Decrement, Opening Value
+        //   Evaluative Settings: Baseline, Ext Quantity, Ext Baseline, Reserve Value, Incumbent
+        //   Bid Interface Visibility: Weighting Visible, Opening Visible, Reserve Visible
+        const table = document.createElement('table');
+        table.className = 'table table-striped table-bordered';
+
+        const thead = document.createElement('thead');
+        // First grouped header row
+        const groupHeaderRow = document.createElement('tr');
+        [
+          { label: 'Core Info', span: 7 },
+          { label: 'Bid Settings', span: 6 },
+          { label: 'Evaluative Settings', span: 5 },
+          { label: 'Bid Interface Visibility', span: 3 }
+        ].forEach(group => {
+          const th = document.createElement('th');
+          th.colSpan = group.span;
+          th.style.textAlign = 'center';
+          th.textContent = group.label;
+          groupHeaderRow.appendChild(th);
+        });
+        thead.appendChild(groupHeaderRow);
+        // Second header row (actual column headers)
+        const headerRow = document.createElement('tr');
+        const headers = [
+          // Core Info (7)
+          'Lot',
+          'Item Number',
+          'Item Name',
+          'Group Number',
+          'Description',
+          'Quantity',
+          'UOM',
+          // Bid Settings (6)
+          'Input',
+          'Required',
+          'Ties',
+          'Decimals',
+          'Decrement',
+          'Opening Value',
+          // Evaluative Settings (5)
+          'Baseline',
+          'Ext Quantity',
+          'Ext Baseline',
+          'Reserve Value',
+          'Incumbent',
+          // Bid Interface Visibility (3)
+          'Weighting Visible',
+          'Opening Visible',
+          'Reserve Visible'
+        ];
+        headers.forEach(h => {
+          const th = document.createElement('th');
+          th.textContent = h;
+          headerRow.appendChild(th);
+        });
+        thead.appendChild(headerRow);
+        table.appendChild(thead);
+
+        const tbody = document.createElement('tbody');
+        items.forEach(item => {
+          const tr = document.createElement('tr');
+
+          // Helper to get display value
+          const getValue = (key) => {
+            if (typeof item[key] === 'boolean') return item[key] ? 'Yes' : 'No';
+            if (item[key] === null || item[key] === undefined || item[key] === '') return '-';
+            return item[key];
+          };
+
+          const cells = [
+            // Core Info (7)
+            item.lot_title || item.lot_name || item.lot_id || '-',
+            getValue('item_number'),
+            getValue('item_name'),
+            getValue('group_number'),
+            getValue('description'),
+            getValue('quantity'),
+            getValue('uom'),
+            // Bid Settings (6)
+            getValue('input'),
+            getValue('required'),
+            getValue('ties'),
+            getValue('decimals'),
+            getValue('decrement'),
+            getValue('opening_value'),
+            // Evaluative Settings (5)
+            getValue('baseline'),
+            getValue('ext_quantity'),
+            getValue('ext_baseline'),
+            getValue('reserve_value'),
+            getValue('incumbent'),
+            // Bid Interface Visibility (3)
+            getValue('weighting_visible'),
+            getValue('opening_visible'),
+            getValue('reserve_visible')
+          ];
+
+          cells.forEach(val => {
+            const td = document.createElement('td');
+            td.textContent = val;
+            tr.appendChild(td);
+          });
+          tbody.appendChild(tr);
+        });
+        table.appendChild(tbody);
+        // Wrap table in horizontally scrollable div
+        const scrollDiv = document.createElement('div');
+        scrollDiv.style.overflowX = 'auto';
+        scrollDiv.appendChild(table);
+        container.appendChild(scrollDiv);
+      } catch (err) {
+        console.error('Error loading line items:', err);
+        const container = document.getElementById('lines');
+        container.innerHTML = '<h2>All Line Items</h2><p>Error loading line items.</p>';
+      }
+    }
+
+    // Handle Create New Lot button
+    function setupCreateLotButton(eventId) {
+      const btn = document.getElementById('create-lot-btn');
+      btn.addEventListener('click', () => {
+        window.location.href = `create-lot.html?event_id=${eventId}`;
+      });
+    }
+
+    // Call loadLots and setupCreateLotButton after event is loaded
+    async function init() {
+      const params = new URLSearchParams(window.location.search);
+      const id = params.get('id');
+      if (id) {
+        await loadEvent();
+        await loadLots(id);
+        await loadAllLineItems(id);
+        setupCreateLotButton(id);
+        await loadUsersAndMembers(id);
+      }
+    }
+
+    // Load users & current members; render separate Managers and Bidders lists
+    async function loadUsersAndMembers(eventId) {
+      try {
+        const [usersRes, eventRes, membersRes] = await Promise.all([
+          authFetch("http://localhost:4000/users"),
+          authFetch(`http://localhost:4000/events/${eventId}`),
+          authFetch(`http://localhost:4000/events/${eventId}/members`)
+        ]);
+
+        const users = await usersRes.json();
+        const event = await eventRes.json();
+        const members = await membersRes.json();
+
+        const assignedBidderIds = new Set(
+          members.filter(m => m.role === "bidder").map(m => m.user_id)
+        );
+
+        const managerList = document.getElementById("managerList");
+        managerList.innerHTML = "";
+        const managers = users.filter(u => u.role === "manager");
+        managers.sort((a, b) => (a.id === event.created_by ? -1 : b.id === event.created_by ? 1 : 0));
+        managers.forEach(u => {
+          const isCreator = u.id === event.created_by;
+          const row = document.createElement("div");
+          row.innerHTML = `
+            <div>
+              <strong>${(u.first_name || "")} ${(u.last_name || "")}${isCreator ? " (Creator)" : ""}</strong><br>
+              <small>${u.email}</small>
+            </div>
+            <input type="checkbox" disabled ${isCreator ? "checked" : ""} />
+          `;
+          managerList.appendChild(row);
+        });
+
+        const bidderList = document.getElementById("bidderList");
+        bidderList.innerHTML = "";
+        const bidders = users.filter(u => u.role === "bidder");
+        bidders.sort((a, b) => (a.first_name || "").localeCompare(b.first_name || ""));
+        bidders.forEach(u => {
+          const checked = assignedBidderIds.has(u.id);
+          const row = document.createElement("div");
+          row.innerHTML = `
+            <div>
+              <strong>
+                <a href="assign-line-items.html?event_id=${eventId}&user_id=${u.id}">
+                  ${(u.first_name || "")} ${(u.last_name || "")}
+                </a>
+              </strong><br>
+              <small>${u.email}</small>
+            </div>
+            <input type="checkbox" class="bidder-assign" data-user-id="${u.id}" ${checked ? "checked" : ""} />
+          `;
+          bidderList.appendChild(row);
+        });
+
+        window._currentAssignedBidderIds = assignedBidderIds;
+      } catch (err) {
+        console.error("Error loading users/members:", err);
+        const managerList = document.getElementById("managerList");
+        const bidderList = document.getElementById("bidderList");
+        if (managerList) managerList.innerHTML = "<p>Error loading managers.</p>";
+        if (bidderList) bidderList.innerHTML = "<p>Error loading bidders.</p>";
+      }
+    }
+
+    // Save bidder assignments: add new ones, remove unchecked ones
+    document.getElementById("save-members-btn").addEventListener("click", async () => {
+      const params = new URLSearchParams(window.location.search);
+      const eventId = params.get('id');
+      if (!eventId) return;
+
+      const checkedIds = new Set(
+        Array.from(document.querySelectorAll(".bidder-assign:checked")).map(cb => parseInt(cb.dataset.userId, 10))
+      );
+      const before = window._currentAssignedBidderIds || new Set();
+
+      // Determine adds and removals
+      const toAdd = [...checkedIds].filter(id => !before.has(id));
+      const toRemove = [...before].filter(id => !checkedIds.has(id));
+
+      try {
+        // Apply adds
+        for (const user_id of toAdd) {
+          await authFetch(`http://localhost:4000/events/${eventId}/members`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ user_id, role: "bidder" })
+          });
+        }
+        // Apply removals
+        for (const user_id of toRemove) {
+          await authFetch(`http://localhost:4000/events/${eventId}/members/${user_id}`, {
+            method: "DELETE"
+          });
+        }
+
+        alert("✅ Bidder assignments saved.");
+        // Reload to refresh state
+        await loadUsersAndMembers(eventId);
+      } catch (e) {
+        console.error("Error saving assignments:", e);
+        alert("Failed to save assignments.");
+      }
+    });
+
+    init();
+  </script>
+  <footer>
+    <p>Tendersmith © 2025</p>
+  </footer>
+  <!-- Bootstrap JS (for optional interactivity) -->
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

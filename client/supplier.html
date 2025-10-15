@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Supplier Bidding</title>
+  <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+</head>
+<body>
+  <h1>Supplier: Place Bid</h1>
+  <input id="amount" type="number" placeholder="Enter bid amount"/>
+  <button onclick="placeBid()">Submit Bid</button>
+
+  <script>
+    const lotId = 1;
+    const supplierId = 2; // pretend logged in supplier
+    const socket = io("http://localhost:4000");
+    socket.emit("join_lot", lotId);
+
+    function placeBid() {
+      const amount = document.getElementById("amount").value;
+      fetch(`http://localhost:4000/lots/${lotId}/bids`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ supplier_id: supplierId, amount })
+      });
+    }
+
+    socket.on("new_bid", (bid) => {
+      console.log("New bid broadcast:", bid);
+    });
+  </script>
+</body>
+</html>

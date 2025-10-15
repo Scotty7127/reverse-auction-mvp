@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Account</title>
+  <!-- Bootstrap CSS -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+  <script src="/auth.js"></script>
+</head>
+<body>
+  <!-- Navbar -->
+  <nav class="navbar">
+    <div class="nav-container">
+      <a href="manager.html" class="brand">Tendersmith</a>
+      <ul class="nav-links">
+        <li><a href="manager.html">Home</a></li>
+        <li><a href="events.html">Events</a></li>
+        <li><a href="organisations.html">Organisations</a></li>
+        <li><a href="stats.html">Stats</a></li>
+        <li><a href="account.html">Account</a></li>
+      </ul>
+    </div>
+  </nav>
+  <main>
+    <section id="account-info">
+      <h3>My Account</h3>
+      <p><strong>Name:</strong> <span id="accountName">Loading...</span></p>
+      <p><strong>Email:</strong> <span id="accountEmail">Loading...</span></p>
+      <button id="editAccountBtn">✏️ Edit Account</button>
+      <button id="logoutBtn">🚪 Logout</button>
+    </section>
+    <hr>
+    <section id="invite-section">
+      <h3>Invite Users</h3>
+      <form id="inviteForm">
+        <label for="inviteEmail">User Email:</label>
+        <input type="email" id="inviteEmail" placeholder="Enter email address" required>
+        
+        <label for="inviteRole">Role:</label>
+        <select id="inviteRole">
+          <option value="bidder">Bidder</option>
+          <option value="manager">Manager</option>
+        </select>
+
+        <button type="submit">Send Invite</button>
+      </form>
+      <p id="inviteMessage" style="margin-top:10px;"></p>
+    </section>
+  </main>
+<script>
+  document.getElementById("inviteForm").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const email = document.getElementById("inviteEmail").value;
+    const role = document.getElementById("inviteRole").value;
+    const message = document.getElementById("inviteMessage");
+    message.textContent = "";
+
+    try {
+      const res = await fetch("http://localhost:4000/invite", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, role }),
+      });
+
+      const data = await res.json();
+      if (res.ok) {
+        message.style.color = "green";
+        message.textContent = data.message || "Invitation sent successfully!";
+        document.getElementById("inviteForm").reset();
+      } else {
+        if (res.status === 400 && data.error && data.error.includes("active invitation")) {
+          message.style.color = "orange";
+          message.textContent = "⚠️ This user already has an active invitation. Please wait for it to expire or be accepted.";
+        } else {
+          message.style.color = "red";
+          message.textContent = data.error || "Failed to send invitation.";
+        }
+      }
+    } catch (err) {
+      console.error("Error sending invite:", err);
+      message.style.color = "red";
+      message.textContent = "An error occurred. Please try again.";
+    }
+  });
+
+// Fetch current user info
+(async function loadAccount() {
+  try {
+    const res = await authFetch("http://localhost:4000/users/me");
+    if (!res.ok) throw new Error("Unauthorized");
+    const user = await res.json();
+    document.getElementById("accountName").textContent =
+      (user.first_name && user.last_name)
+        ? `${user.first_name} ${user.last_name}`
+        : user.first_name || user.last_name || "Unknown";
+    document.getElementById("accountEmail").textContent = user.email || "Unknown";
+  } catch (err) {
+    console.error("Failed to load user info:", err);
+    window.location.href = "/start.html";
+  }
+})();
+
+// Logout button
+document.getElementById("logoutBtn").addEventListener("click", () => {
+  localStorage.clear();
+  window.location.href = "/start.html";
+});
+
+// Edit account button (placeholder for now)
+document.getElementById("editAccountBtn").addEventListener("click", () => {
+  alert("Edit account functionality coming soon!");
+});
+</script>
+<!-- Bootstrap JS (for optional interactivity) -->
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

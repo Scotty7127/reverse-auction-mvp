@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sign In | Reverse Auction</title>
+  <link rel="stylesheet" href="style.css">
+  <style>
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background-color: #f4f6f9;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+    }
+
+    .login-container {
+      background: white;
+      padding: 40px 50px;
+      border-radius: 8px;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+      width: 350px;
+      text-align: center;
+    }
+
+    h1 {
+      font-size: 22px;
+      margin-bottom: 20px;
+    }
+
+    input[type="email"],
+    input[type="password"] {
+      width: 100%;
+      padding: 10px;
+      margin: 8px 0;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      font-size: 14px;
+    }
+
+    button {
+      width: 100%;
+      padding: 10px;
+      margin-top: 10px;
+      background-color: #0078d4;
+      border: none;
+      color: white;
+      font-size: 15px;
+      font-weight: 500;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    button:hover {
+      background-color: #005ea0;
+    }
+
+    button:disabled {
+      background-color: #a0a0a0;
+      cursor: not-allowed;
+    }
+
+    .error {
+      color: red;
+      font-size: 13px;
+      margin-top: 10px;
+    }
+
+    .footer {
+      margin-top: 20px;
+      font-size: 13px;
+      color: #666;
+    }
+
+    .footer a {
+      color: #0078d4;
+      text-decoration: none;
+    }
+
+    .footer a:hover {
+      text-decoration: underline;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="login-container">
+    <h1>Sign In</h1>
+    <form id="loginForm">
+      <input type="email" id="email" placeholder="Email" required>
+      <input type="password" id="password" placeholder="Password" required>
+      <button type="submit" id="submitBtn">Sign In</button>
+    </form>
+    <div id="error" class="error"></div>
+
+    <div class="footer">
+      Don’t have an account? <a href="#">Request access</a>
+    </div>
+  </div>
+
+  <script>
+    const apiBase = "http://localhost:4000";
+
+    document.getElementById("loginForm").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const email = document.getElementById("email").value.trim();
+      const password = document.getElementById("password").value.trim();
+      const errorDiv = document.getElementById("error");
+      const submitBtn = document.getElementById("submitBtn");
+      errorDiv.textContent = "";
+      submitBtn.disabled = true;
+      submitBtn.textContent = "Signing In...";
+
+      try {
+        const res = await fetch(`${apiBase}/login`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email, password }),
+        });
+
+        const data = await res.json();
+
+        if (!res.ok) {
+          errorDiv.textContent = data.error || "Login failed.";
+          submitBtn.disabled = false;
+          submitBtn.textContent = "Sign In";
+          return;
+        }
+
+        if (!data.token) {
+          errorDiv.textContent = "Login failed: no token received.";
+          submitBtn.disabled = false;
+          submitBtn.textContent = "Sign In";
+          return;
+        }
+
+        // Clear old session first
+        localStorage.removeItem("token");
+        localStorage.removeItem("user");
+        // Save token in localStorage for authenticated pages
+        localStorage.setItem("token", data.token);
+        localStorage.setItem("user", JSON.stringify(data.user));
+
+        // Redirect based on user role
+        if (data.user.role === "manager") {
+          window.location.href = "manager.html";
+        } else if (data.user.role === "bidder") {
+          window.location.href = "bidder.html";
+        } else {
+          errorDiv.textContent = "Invalid user role. Please contact support.";
+          submitBtn.disabled = false;
+          submitBtn.textContent = "Sign In";
+        }
+      } catch (err) {
+        console.error("Login error:", err);
+        errorDiv.textContent = "Something went wrong. Please try again.";
+        submitBtn.disabled = false;
+        submitBtn.textContent = "Sign In";
+      }
+    });
+  </script>
+
+</body>
+</html>

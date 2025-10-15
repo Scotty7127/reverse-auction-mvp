@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Lot Details</title>
+  <!-- Bootstrap CSS -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="style.css" />
+  <script src="/auth.js"></script>
+</head>
+<body>
+  <header>
+    <h1>Lot Details</h1>
+    <button onclick="goBack()">⬅ Back to Event</button>
+  </header>
+
+  <section id="lot-info" style="margin-bottom: 20px;">
+    <h2 id="lot-title">Loading...</h2>
+    <p id="lot-description"></p>
+  </section>
+
+  <section>
+    <h3>Line Items</h3>
+    <div class="actions">
+      <button onclick="addRow()">➕ Add Row</button>
+      <button onclick="saveAll()">💾 Save Changes</button>
+      <button onclick="exportExcel()">📤 Export Excel</button>
+      <input type="file" id="excelInput" style="display:none" accept=".xlsx" onchange="importExcel(event)" />
+      <button onclick="document.getElementById('excelInput').click()">📥 Import Excel</button>
+    </div>
+
+    <div style="overflow-x: auto;">
+      <table class="line-items-table" id="line-items-table">
+        <thead>
+          <tr>
+            <th colspan="7">Core Info</th>
+            <th colspan="6">Bid Settings</th>
+            <th colspan="4">Evaluative Settings</th>
+            <th colspan="3">Bid Interface Visibility</th>
+            <th rowspan="2">Actions</th>
+          </tr>
+          <tr>
+            <!-- Core Info -->
+            <th>Item #</th>
+            <th>Item Name</th>
+            <th>Group #</th>
+            <th>Description</th>
+            <th>Qty</th>
+            <th>UOM</th>
+
+            <!-- Bid Settings -->
+            <th>Input</th>
+            <th>Required</th>
+            <th>Ties</th>
+            <th>.00</th>
+            <th>Decrement</th>
+            <th>Opening</th>
+
+            <!-- Evaluative Settings -->
+            <th>Baseline</th>
+            <th>Ext Qty</th>
+            <th>Ext Base</th>
+            <th>Reserve</th>
+            <th>Incumbent</th>
+
+            <!-- Bid Interface Visibility -->
+            <th>Weighting</th>
+            <th>Opening</th>
+            <th>Reserve</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </section>
+
+  <script>
+    const params = new URLSearchParams(window.location.search);
+    const lotId = params.get("id");
+    const apiBase = "http://localhost:4000";
+
+    async function loadLot() {
+      const res = await authFetch(`${apiBase}/lots/${lotId}`);
+      const lot = await res.json();
+      document.getElementById("lot-title").textContent = lot.title;
+      document.getElementById("lot-description").textContent = lot.description || "";
+      document.getElementById("lot-time").textContent = lot.auction_time
+        ? new Date(lot.auction_time).toLocaleString(undefined, {
+            hour: "numeric", minute: "2-digit", hour12: true, timeZoneName: "short"
+          })
+        : "-";
+    }
+
+    async function loadLineItems() {
+      const res = await authFetch(`${apiBase}/lots/${lotId}/line-items`);
+      const items = await res.json();
+      const tbody = document.querySelector("#line-items-table tbody");
+      tbody.innerHTML = "";
+      items.forEach((item) => addRow(item));
+    }
+
+    function addRow(item = {}) {
+      const tbody = document.querySelector("#line-items-table tbody");
+      const tr = document.createElement("tr");
+
+      const columns = [
+        "item_number", "item_name", "group_number", "description", "quantity", "uom",
+        "input", "required", "ties", "decimals", "decrement", "opening_value",
+        "baseline", "ext_quantity", "ext_baseline", "reserve_value", "incumbent",
+        "weighting_visible", "opening_visible", "reserve_visible"
+      ];
+
+      columns.forEach((col) => {
+        const td = document.createElement("td");
+        td.classList.add("line-item-cell");
+        if (col === "") {
+          td.textContent = ""; // empty cell for header alignment
+          td.contentEditable = false;
+        } else {
+          td.contentEditable = true;
+          td.dataset.field = col;
+          td.textContent = item[col] !== undefined && item[col] !== null ? item[col] : "";
+        }
+        tr.appendChild(td);
+      });
+
+      const actions = document.createElement("td");
+      const delBtn = document.createElement("button");
+      delBtn.textContent = "🗑";
+      delBtn.className = "delete-btn-small";
+      delBtn.onclick = async () => {
+        if (item.id && confirm("Delete this line item?")) {
+          await authFetch(`${apiBase}/line-items/${item.id}`, { method: "DELETE" });
+          tr.remove();
+        } else {
+          tr.remove();
+        }
+      };
+      actions.appendChild(delBtn);
+      tr.appendChild(actions);
+
+      tr.dataset.id = item.id || "";
+      tbody.appendChild(tr);
+    }
+
+    async function saveAll() {
+      const rows = document.querySelectorAll("#line-items-table tbody tr");
+      for (const row of rows) {
+        const cells = row.querySelectorAll("td[data-field]");
+        const payload = {};
+        cells.forEach((cell) => (payload[cell.dataset.field] = cell.textContent.trim()));
+
+        if (row.dataset.id) {
+          // update
+          await authFetch(`${apiBase}/line-items/${row.dataset.id}`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload)
+          });
+        } else {
+          // create
+          const res = await authFetch(`${apiBase}/lots/${lotId}/line-items`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload)
+          });
+          const newItem = await res.json();
+          row.dataset.id = newItem.id;
+        }
+      }
+      alert("✅ Line items saved!");
+      loadLineItems();
+    }
+//back to lots in event
+    async function goBack() {
+      try {
+        const res = await authFetch(`${apiBase}/lots/${lotId}`);
+        const lot = await res.json();
+        if (lot.event_id) {
+          window.location.href = `event.html?id=${lot.event_id}&tab=lots`;
+        } else {
+          window.location.href = "events.html";
+        }
+      } catch (err) {
+        console.error("Error fetching event ID for lot:", err);
+        window.location.href = "events.html";
+      }
+    }
+
+    async function exportExcel() {
+      const res = await authFetch(`${apiBase}/lots/${lotId}/line-items/export`);
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `lot_${lotId}_line_items.xlsx`;
+      a.click();
+      window.URL.revokeObjectURL(url);
+    }
+
+    async function importExcel(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+      const formData = new FormData();
+      formData.append("file", file);
+      await authFetch(`${apiBase}/lots/${lotId}/line-items/import`, {
+        method: "POST",
+        body: formData
+      });
+      alert("✅ Excel imported successfully!");
+      loadLineItems();
+    }
+
+    loadLot();
+    loadLineItems();
+  </script>
+  <footer>
+    <p>Tendersmith © 2025</p>
+  </footer>
+  <!-- Bootstrap JS (for optional interactivity) -->
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <title>Tendersmith Create Account</title>
+  <style>
+    body {
+      font-family: 'Segoe UI';
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      background-color: #f4f6f9;
+    }
+    .box {
+      background: white;
+      padding: 30px 40px;
+      border-radius: 6px;
+      box-shadow: 0 3px 10px rgba(0,0,0,0.1);
+      width: 320px;
+    }
+    input, button {
+      width: 100%;
+      padding: 10px;
+      margin: 8px 0;
+      font-size: 14px;
+    }
+    button {
+      background: #0078d4;
+      border: none;
+      color: white;
+      cursor: pointer;
+      border-radius: 4px;
+    }
+  </style>
+</head>
+<body>
+  <div class="box">
+    <h2>Create Your Account</h2>
+    <form id="inviteForm">
+      <input type="text" id="firstName" placeholder="First name" required />
+      <input type="text" id="lastName" placeholder="Last name" required />
+      <input type="password" id="password" placeholder="New password" required />
+      <input type="password" id="confirmPassword" placeholder="Confirm password" required />
+      <button type="submit">Activate Account</button>
+    </form>
+    <div id="msg" style="color:red;"></div>
+  </div>
+
+  <script>
+    const token = window.location.pathname.split("/").pop();
+    const apiBase = "http://localhost:4000";
+
+    document.getElementById("inviteForm").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const first_name = document.getElementById("firstName").value;
+      const last_name = document.getElementById("lastName").value;
+      const password = document.getElementById("password").value;
+      const confirmPassword = document.getElementById("confirmPassword").value;
+      const msg = document.getElementById("msg");
+      msg.textContent = "";
+
+      if (password !== confirmPassword) {
+        msg.textContent = "Passwords do not match.";
+        return;
+      }
+
+      const res = await fetch(`${apiBase}/invite/accept`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token, password, first_name, last_name }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        document.getElementById("msg").textContent = data.error;
+      } else {
+        alert("✅ Account activated! You can now sign in.");
+        setTimeout(() => (window.location.href = "/start.html"), 100);
+      }
+    });
+  </script>
+</body>
+</html>

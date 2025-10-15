@@ -1,0 +1,237 @@
+/* === Global Base Styles === */
+html, body {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  font-family: "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  background-color: #f8f9fa;
+  color: #333;
+}
+
+.container {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 20px;
+}
+
+/* === Typography === */
+h1, h2, h3, h4, h5 {
+  font-weight: 600;
+  color: #212529;
+}
+
+p {
+  color: #555;
+  line-height: 1.6;
+}
+
+/* === Desktop Navbar (Clean Professional) === */
+.navbar {
+  background-color: #1e293b;
+  color: #f8fafc;
+  border-bottom: 3px solid #38bdf8;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+  position: sticky;
+  top: 0;
+  z-index: 1000;
+}
+
+.nav-container {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 10px 30px;
+}
+
+.brand {
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: #f8fafc;
+  text-decoration: none;
+  letter-spacing: 0.5px;
+}
+
+.nav-links {
+  list-style: none;
+  display: flex;
+  gap: 30px;
+  margin: 0;
+  padding: 20;
+}
+
+.nav-links a {
+  color: #e2e8f0;
+  text-decoration: none;
+  font-weight: 500;
+  transition: color 0.2s ease, border-bottom 0.2s ease;
+  padding-bottom: 3px;
+}
+
+.nav-links a:hover {
+  color: #38bdf8;
+  border-bottom: 2px solid #38bdf8;
+}
+
+.nav-toggle {
+  display: none;
+}
+
+/* === Cards === */
+.card {
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  background-color: #fff;
+  margin-bottom: 1rem;
+}
+
+.card:hover {
+  box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+}
+
+.card-body {
+  padding: 20px;
+}
+
+.card-title {
+  font-size: 1.25rem;
+  font-weight: 600;
+}
+
+/* === Buttons === */
+.btn {
+  border-radius: 6px;
+  font-weight: 500;
+  transition: transform 0.1s ease, background-color 0.2s ease;
+}
+
+.btn:hover {
+  transform: translateY(-1px);
+}
+
+.btn-primary {
+  background-color: #007bff;
+  border-color: #007bff;
+}
+
+.btn-primary:hover {
+  background-color: #0056b3;
+}
+
+.btn-danger {
+  background-color: #dc3545;
+  border: none;
+}
+
+.btn-danger:hover {
+  background-color: #b02a37;
+}
+
+/* === Forms === */
+input, select, textarea {
+  border-radius: 5px;
+  border: 1px solid #ccc;
+  padding: 6px 8px;
+  font-size: 14px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+input:focus, select:focus, textarea:focus {
+  outline: none;
+  border-color: #0d6efd;
+  box-shadow: 0 0 0 0.2rem rgba(13,110,253,0.25);
+}
+
+/* === Footer === */
+footer {
+  text-align: center;
+  color: #777;
+  font-size: 14px;
+  margin-top: 50px;
+  padding-bottom: 20px;
+}
+
+/* === Utility Classes === */
+.text-center { text-align: center; }
+.mt-2 { margin-top: 8px; }
+.mb-3 { margin-bottom: 16px; }
+.shadow-sm { box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+
+/* === Excel-style Table (Minimal & Consistent) === */
+.line-items-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  background: white;
+}
+
+.line-items-table th,
+.line-items-table td {
+  border: 1px solid #d0d0d0;
+  padding: 0 3px;
+  height: 18px;
+  vertical-align: middle;
+}
+
+.line-items-table th {
+  background: #f3f3f3;
+  font-weight: bold;
+  text-align: center;
+}
+
+.line-items-table tr:nth-child(even) {
+  background-color: #fafafa;
+}
+
+.line-items-table tr:hover {
+  background-color: #e9f3ff;
+}
+
+.line-items-table input {
+  width: 100%;
+  height: 18px;
+  border: none;
+  padding: 0 3px;
+  background: transparent;
+  font-size: 12px;
+  font-family: inherit;
+}
+
+.line-item-cell:focus {
+  outline: 2px solid #0078d4;   /* thinner than default */
+  outline-offset: -1px;         /* move it inside the cell */
+  background-color: #fffceb;    /* subtle highlight like Excel */
+}
+
+/* === Compact Delete Button (for spreadsheet tables) === */
+.delete-btn-small {
+  all: unset;
+  cursor: pointer;
+  font-size: 12px;
+  line-height: 1;
+  padding: 0 2px;
+  text-align: center;
+}
+
+.delete-btn-small:hover {
+  color: red;
+  background-color: #ffeaea;
+}
+
+/* messages */
+.nav-icon-btn {
+  background: none;
+  border: none;
+  font-size: 1.4rem;
+  cursor: pointer;
+  color: white;
+  transition: transform 0.2s ease;
+}
+
+.nav-icon-btn:hover {
+  transform: scale(1.1);
+  color: #ffc107;
+}

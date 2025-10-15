@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Organisation Details</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <h1 id="page-title">Add Organisation</h1>
+    <button onclick="goBack()">⬅ Back</button>
+  </header>
+
+  <main>
+    <form id="org-form" enctype="multipart/form-data">
+      <label>
+        Organisation Name:
+        <input type="text" id="org-name" name="name" required>
+      </label>
+
+      <label>
+        Currency:
+        <select id="org-currency" name="currency" required>
+          <option value="">Select currency</option>
+          <option value="USD">USD - US Dollar</option>
+          <option value="GBP">GBP - British Pound</option>
+          <option value="EUR">EUR - Euro</option>
+          <option value="AUD">AUD - Australian Dollar</option>
+          <option value="CAD">CAD - Canadian Dollar</option>
+        </select>
+      </label>
+
+      <label>
+        Logo:
+        <input type="file" id="org-logo" name="logo" accept="image/*">
+      </label>
+
+      <div class="actions">
+        <button type="submit">💾 Save</button>
+      </div>
+    </form>
+
+    <section id="categories-section" style="margin-top: 2em;">
+      <h2>Categories</h2>
+      <form id="category-form" style="display: flex; gap: 1em; align-items: center; margin-bottom: 1em;">
+        <input type="text" id="category-name" name="name" placeholder="Name" required>
+        <input type="text" id="category-description" name="description" placeholder="Description" required>
+        <button type="submit">➕ Add Category</button>
+        <button type="button" id="cancel-edit" style="display:none;">✖ Cancel Edit</button>
+      </form>
+      <table id="categories-table" border="1" cellpadding="5" cellspacing="0" style="width: 100%; border-collapse: collapse;">
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Description</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          <!-- Categories will be populated here -->
+        </tbody>
+      </table>
+    </section>
+  </main>
+
+  <!-- Make sure auth.js loads before any custom scripts -->
+  <script src="/auth.js"></script>
+  <script>
+    const apiBase = "http://localhost:4000";
+    const params = new URLSearchParams(window.location.search);
+    const orgId = params.get("id");
+
+    const form = document.getElementById("org-form");
+    const title = document.getElementById("page-title");
+
+
+    // Ensure authenticated via API and store current user
+    async function ensureAuth() {
+      try {
+        const res = await authFetch(`${apiBase}/users/me`);
+        if (!res.ok) throw new Error("unauthorized");
+        const me = await res.json();
+        window.currentUser = me;
+        return true;
+      } catch (e) {
+        // Redirect to sign-in if token is missing/invalid/expired
+        window.location.href = "/start.html";
+        return false;
+      }
+    }
+
+    // Load existing organisation if editing
+    async function loadOrganisation() {
+      if (!orgId) return;
+      title.textContent = "Edit Organisation";
+
+      const res = await authFetch(`${apiBase}/organisations/${orgId}`);
+      const org = await res.json();
+
+      document.getElementById("org-name").value = org.name || "";
+      document.getElementById("org-currency").value = org.currency || "";
+    }
+
+    // Handle create or update
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+
+      const formData = new FormData(form);
+      let method = orgId ? "PUT" : "POST";
+      let endpoint = orgId ? `${apiBase}/organisations/${orgId}` : `${apiBase}/organisations`;
+
+      const res = await authFetch(endpoint, { method, body: formData });
+      if (res.ok) {
+        alert("✅ Organisation saved successfully!");
+        if (!orgId) {
+          // Redirect to edit page with new org ID if just created
+          const data = await res.json();
+          window.location.href = `orgdetail.html?id=${data.id}`;
+        } else {
+          window.location.href = "organisations.html";
+        }
+      } else {
+        alert("❌ Failed to save organisation.");
+      }
+    });
+
+    function goBack() {
+      window.history.back();
+    }
+
+    // Initialize page after successful auth
+    (async function init() {
+      const ok = await ensureAuth();
+      if (!ok) return;
+      await loadOrganisation();
+      if (orgId) {
+        await fetchCategories();
+      }
+    })();
+
+    // Categories management
+    const categoryForm = document.getElementById("category-form");
+    const categoryNameInput = document.getElementById("category-name");
+    const categoryDescriptionInput = document.getElementById("category-description");
+    const categoriesTableBody = document.querySelector("#categories-table tbody");
+    const cancelEditBtn = document.getElementById("cancel-edit");
+
+    let editingCategoryId = null;
+
+    async function fetchCategories() {
+      if (!orgId) {
+        categoriesTableBody.innerHTML = '<tr><td colspan="3">Save organisation first to manage categories.</td></tr>';
+        return;
+      }
+      try {
+        const res = await authFetch(`${apiBase}/organisations/${orgId}/categories`);
+        if (res.ok) {
+          const categories = await res.json();
+          renderCategories(categories);
+        } else {
+          let errorMsg = "Failed to load categories.";
+          try {
+            const errData = await res.json();
+            if (errData && errData.error) errorMsg += ` (${errData.error})`;
+          } catch {}
+          categoriesTableBody.innerHTML = `<tr><td colspan="3">${errorMsg}</td></tr>`;
+        }
+      } catch (err) {
+        categoriesTableBody.innerHTML = `<tr><td colspan="3">Error loading categories: ${err.message}</td></tr>`;
+        console.error("Error fetching categories:", err);
+      }
+    }
+
+    function renderCategories(categories) {
+      if (!categories.length) {
+        categoriesTableBody.innerHTML = '<tr><td colspan="3">No categories found.</td></tr>';
+        return;
+      }
+      categoriesTableBody.innerHTML = "";
+      categories.forEach(cat => {
+        const tr = document.createElement("tr");
+
+        const nameTd = document.createElement("td");
+        nameTd.textContent = cat.name;
+        tr.appendChild(nameTd);
+
+        const descTd = document.createElement("td");
+        descTd.textContent = cat.description;
+        tr.appendChild(descTd);
+
+        const actionsTd = document.createElement("td");
+
+        const editBtn = document.createElement("button");
+        editBtn.textContent = "✏️ Edit";
+        editBtn.style.marginRight = "0.5em";
+        editBtn.addEventListener("click", () => startEditCategory(cat));
+        actionsTd.appendChild(editBtn);
+
+        const deleteBtn = document.createElement("button");
+        deleteBtn.textContent = "🗑️ Delete";
+        deleteBtn.addEventListener("click", () => deleteCategory(cat.id));
+        actionsTd.appendChild(deleteBtn);
+
+        tr.appendChild(actionsTd);
+
+        categoriesTableBody.appendChild(tr);
+      });
+    }
+
+    function startEditCategory(category) {
+      editingCategoryId = category.id;
+      categoryNameInput.value = category.name;
+      categoryDescriptionInput.value = category.description;
+      categoryForm.querySelector("button[type='submit']").textContent = "💾 Save Changes";
+      cancelEditBtn.style.display = "inline-block";
+    }
+
+    cancelEditBtn.addEventListener("click", () => {
+      editingCategoryId = null;
+      categoryNameInput.value = "";
+      categoryDescriptionInput.value = "";
+      categoryForm.querySelector("button[type='submit']").textContent = "➕ Add Category";
+      cancelEditBtn.style.display = "none";
+    });
+
+    categoryForm.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      if (!orgId) {
+        alert("Please save the organisation first before managing categories.");
+        return;
+      }
+
+      const name = categoryNameInput.value.trim();
+      const description = categoryDescriptionInput.value.trim();
+
+      if (!name || !description) {
+        alert("Please provide both name and description for the category.");
+        return;
+      }
+
+      let res;
+      try {
+        // For debugging: show orgId before submit
+        console.log("[Category Submit] orgId:", orgId);
+        let requestUrl, requestOptions;
+        if (editingCategoryId) {
+          // Update existing category
+          requestUrl = `${apiBase}/categories/${editingCategoryId}`;
+          requestOptions = {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ name, description })
+          };
+        } else {
+          // Create new category
+          requestUrl = `${apiBase}/organisations/${orgId}/categories`;
+          requestOptions = {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ name, description })
+          };
+        }
+        // Log request details
+        console.log("[Category Submit] Request:", requestUrl, requestOptions);
+        res = await authFetch(requestUrl, requestOptions);
+        // Log response details
+        console.log("[Category Submit] Response status:", res.status);
+        let resBody;
+        try {
+          resBody = await res.clone().json();
+        } catch {
+          resBody = await res.clone().text();
+        }
+        console.log("[Category Submit] Response body:", resBody);
+        if (res.ok) {
+          alert(editingCategoryId ? "✅ Category updated successfully!" : "✅ Category added successfully!");
+          editingCategoryId = null;
+          categoryNameInput.value = "";
+          categoryDescriptionInput.value = "";
+          categoryForm.querySelector("button[type='submit']").textContent = "➕ Add Category";
+          cancelEditBtn.style.display = "none";
+          fetchCategories();
+        } else {
+          let msg = "❌ Failed to save category.";
+          if (resBody && typeof resBody === "object" && resBody.error) {
+            msg += `\n${resBody.error}`;
+          }
+          alert(msg);
+        }
+      } catch (err) {
+        alert(`❌ Error saving category: ${err.message}`);
+        console.error("[Category Submit] Error:", err);
+      }
+    });
+
+    async function deleteCategory(id) {
+      if (!confirm("Are you sure you want to delete this category?")) return;
+      try {
+        const res = await authFetch(`${apiBase}/categories/${id}`, { method: "DELETE" });
+        if (res.ok) {
+          alert("✅ Category deleted successfully!");
+          fetchCategories();
+        } else {
+          let msg = "❌ Failed to delete category.";
+          try {
+            const errData = await res.json();
+            if (errData && errData.error) msg += `\n${errData.error}`;
+          } catch {}
+          alert(msg);
+        }
+      } catch (err) {
+        alert(`❌ Error deleting category: ${err.message}`);
+        console.error("[Category Delete] Error:", err);
+      }
+    }
+
+  </script>
+</body>
+</html>
