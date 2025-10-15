@@ -53,17 +53,7 @@ console.log(isProduction ? "🌐 Running in production (Render/Neon)" : "💻 Ru
 async function runMigrations() {
   console.log("🛠️ Running startup migrations...");
   try {
-    await pool.query(`ALTER TABLE bids ADD COLUMN IF NOT EXISTS supplier_name TEXT;`);
-    await pool.query(`ALTER TABLE events ADD COLUMN IF NOT EXISTS description TEXT;`);
-    await pool.query(`ALTER TABLE events ADD COLUMN IF NOT EXISTS currency TEXT;`);
-    await pool.query(`ALTER TABLE events ADD COLUMN IF NOT EXISTS support_contact TEXT;`);
-    await pool.query(`ALTER TABLE events ADD COLUMN IF NOT EXISTS bid_manager TEXT;`);
-    await pool.query(`ALTER TABLE events ADD COLUMN IF NOT EXISTS created_by INT REFERENCES users(id) ON DELETE SET NULL;`);
-    await pool.query(`ALTER TABLE events ADD COLUMN IF NOT EXISTS auction_time TIMESTAMP;`);
-    await pool.query(`ALTER TABLE events ADD COLUMN IF NOT EXISTS organisation_id INTEGER REFERENCES organisations(id) ON DELETE CASCADE;`);
-    await pool.query(`ALTER TABLE events ADD COLUMN IF NOT EXISTS category_id INTEGER REFERENCES categories(id) ON DELETE CASCADE;`);
-    await pool.query(`ALTER TABLE events DROP COLUMN IF EXISTS organisation;`);
-    await pool.query(`ALTER TABLE lots DROP COLUMN IF EXISTS auction_time;`);
+    // 1) CREATE TABLES FIRST (safe on empty DBs)
     await pool.query(`
       CREATE TABLE IF NOT EXISTS organisations (
         id SERIAL PRIMARY KEY,
@@ -73,6 +63,7 @@ async function runMigrations() {
         created_at TIMESTAMP DEFAULT NOW()
       );
     `);
+
     await pool.query(`
       CREATE TABLE IF NOT EXISTS categories (
         id SERIAL PRIMARY KEY,
@@ -82,6 +73,21 @@ async function runMigrations() {
         created_at TIMESTAMP DEFAULT NOW()
       );
     `);
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS users (
+        id SERIAL PRIMARY KEY,
+        name TEXT,
+        email TEXT UNIQUE,
+        password_hash TEXT,
+        role TEXT CHECK (role IN ('manager', 'bidder')) DEFAULT 'bidder',
+        organisation_id INT REFERENCES organisations(id) ON DELETE SET NULL,
+        first_name TEXT,
+        last_name TEXT,
+        created_at TIMESTAMP DEFAULT NOW()
+      );
+    `);
+
     await pool.query(`
       CREATE TABLE IF NOT EXISTS events (
         id SERIAL PRIMARY KEY,
@@ -97,19 +103,7 @@ async function runMigrations() {
         created_at TIMESTAMP DEFAULT NOW()
       );
     `);
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS users (
-        id SERIAL PRIMARY KEY,
-        name TEXT,
-        email TEXT UNIQUE,
-        password_hash TEXT,
-        role TEXT CHECK (role IN ('manager', 'bidder')) DEFAULT 'bidder',
-        organisation_id INT REFERENCES organisations(id) ON DELETE SET NULL,
-        first_name TEXT,
-        last_name TEXT,
-        created_at TIMESTAMP DEFAULT NOW()
-      );
-    `);
+
     await pool.query(`
       CREATE TABLE IF NOT EXISTS invitations (
         id SERIAL PRIMARY KEY,
@@ -121,6 +115,7 @@ async function runMigrations() {
         created_at TIMESTAMP DEFAULT NOW()
       );
     `);
+
     await pool.query(`
       CREATE TABLE IF NOT EXISTS lots (
         id SERIAL PRIMARY KEY,
@@ -129,6 +124,7 @@ async function runMigrations() {
         description TEXT
       );
     `);
+
     await pool.query(`
       CREATE TABLE IF NOT EXISTS line_items (
         id SERIAL PRIMARY KEY,
@@ -156,6 +152,7 @@ async function runMigrations() {
         created_at TIMESTAMP DEFAULT NOW()
       );
     `);
+
     await pool.query(`
       CREATE TABLE IF NOT EXISTS event_members (
         id SERIAL PRIMARY KEY,
@@ -166,6 +163,7 @@ async function runMigrations() {
         UNIQUE (event_id, user_id)
       );
     `);
+
     await pool.query(`
       CREATE TABLE IF NOT EXISTS bidder_item_assignments (
         id SERIAL PRIMARY KEY,
@@ -175,6 +173,7 @@ async function runMigrations() {
         UNIQUE (user_id, line_item_id)
       );
     `);
+
     await pool.query(`
       CREATE TABLE IF NOT EXISTS rfqs (
         id SERIAL PRIMARY KEY,
@@ -187,6 +186,18 @@ async function runMigrations() {
         created_at TIMESTAMP DEFAULT NOW()
       );
     `);
+
+    // 2) THEN DO ALTERS / DROPS (safe if columns already exist)
+    await pool.query(`ALTER TABLE events ADD COLUMN IF NOT EXISTS description TEXT;`);
+    await pool.query(`ALTER TABLE events ADD COLUMN IF NOT EXISTS currency TEXT;`);
+    await pool.query(`ALTER TABLE events ADD COLUMN IF NOT EXISTS support_contact TEXT;`);
+    await pool.query(`ALTER TABLE events ADD COLUMN IF NOT EXISTS bid_manager TEXT;`);
+    await pool.query(`ALTER TABLE events ADD COLUMN IF NOT EXISTS created_by INT REFERENCES users(id) ON DELETE SET NULL;`);
+    await pool.query(`ALTER TABLE events ADD COLUMN IF NOT EXISTS auction_time TIMESTAMP;`);
+    await pool.query(`ALTER TABLE events ADD COLUMN IF NOT EXISTS organisation_id INTEGER REFERENCES organisations(id) ON DELETE CASCADE;`);
+    await pool.query(`ALTER TABLE events ADD COLUMN IF NOT EXISTS category_id INTEGER REFERENCES categories(id) ON DELETE CASCADE;`);
+    await pool.query(`ALTER TABLE events DROP COLUMN IF EXISTS organisation;`);
+    await pool.query(`ALTER TABLE lots DROP COLUMN IF EXISTS auction_time;`);
     console.log("✅ Startup migrations complete.");
   } catch (err) {
     console.error("❌ Migration error:", err.message);
