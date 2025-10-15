@@ -198,6 +198,18 @@ async function runMigrations() {
     await pool.query(`ALTER TABLE events ADD COLUMN IF NOT EXISTS category_id INTEGER REFERENCES categories(id) ON DELETE CASCADE;`);
     await pool.query(`ALTER TABLE events DROP COLUMN IF EXISTS organisation;`);
     await pool.query(`ALTER TABLE lots DROP COLUMN IF EXISTS auction_time;`);
+
+    // Ensure messages table exists
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS messages (
+        id SERIAL PRIMARY KEY,
+        sender_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        receiver_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        content TEXT NOT NULL,
+        created_at TIMESTAMP DEFAULT NOW(),
+        read BOOLEAN DEFAULT FALSE
+      );
+    `);
     console.log("✅ Startup migrations complete.");
   } catch (err) {
     console.error("❌ Migration error:", err.message);
@@ -1226,21 +1238,6 @@ app.post("/admin/clear-test-data", async (req, res) => {
 });
 
 
-// === Messaging System ===
-
-// Ensure messages table exists
-(async () => {
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS messages (
-      id SERIAL PRIMARY KEY,
-      sender_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
-      receiver_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
-      content TEXT NOT NULL,
-      created_at TIMESTAMP DEFAULT NOW(),
-      read BOOLEAN DEFAULT FALSE
-    );
-  `);
-})();
 
 // Get recent chats for a user
 app.get("/users/:id/recent_chats", ensureAuthenticated, async (req, res) => {
