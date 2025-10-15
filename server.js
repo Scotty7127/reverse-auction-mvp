@@ -49,8 +49,156 @@ const pool = new Pool({
 
 console.log(isProduction ? "🌐 Running in production (Render/Neon)" : "💻 Running locally (localhost Postgres)");
 
+// ---- Migrations: run automatically on startup ----
+async function runMigrations() {
+  console.log("🛠️ Running startup migrations...");
+  try {
+    await pool.query(`ALTER TABLE bids ADD COLUMN IF NOT EXISTS supplier_name TEXT;`);
+    await pool.query(`ALTER TABLE events ADD COLUMN IF NOT EXISTS description TEXT;`);
+    await pool.query(`ALTER TABLE events ADD COLUMN IF NOT EXISTS currency TEXT;`);
+    await pool.query(`ALTER TABLE events ADD COLUMN IF NOT EXISTS support_contact TEXT;`);
+    await pool.query(`ALTER TABLE events ADD COLUMN IF NOT EXISTS bid_manager TEXT;`);
+    await pool.query(`ALTER TABLE events ADD COLUMN IF NOT EXISTS created_by INT REFERENCES users(id) ON DELETE SET NULL;`);
+    await pool.query(`ALTER TABLE events ADD COLUMN IF NOT EXISTS auction_time TIMESTAMP;`);
+    await pool.query(`ALTER TABLE events ADD COLUMN IF NOT EXISTS organisation_id INTEGER REFERENCES organisations(id) ON DELETE CASCADE;`);
+    await pool.query(`ALTER TABLE events ADD COLUMN IF NOT EXISTS category_id INTEGER REFERENCES categories(id) ON DELETE CASCADE;`);
+    await pool.query(`ALTER TABLE events DROP COLUMN IF EXISTS organisation;`);
+    await pool.query(`ALTER TABLE lots DROP COLUMN IF EXISTS auction_time;`);
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS organisations (
+        id SERIAL PRIMARY KEY,
+        name TEXT NOT NULL,
+        currency TEXT,
+        logo_url TEXT,
+        created_at TIMESTAMP DEFAULT NOW()
+      );
+    `);
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS categories (
+        id SERIAL PRIMARY KEY,
+        organisation_id INTEGER REFERENCES organisations(id) ON DELETE CASCADE,
+        name VARCHAR(255) NOT NULL,
+        description TEXT,
+        created_at TIMESTAMP DEFAULT NOW()
+      );
+    `);
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS events (
+        id SERIAL PRIMARY KEY,
+        title TEXT,
+        description TEXT,
+        organisation_id INTEGER REFERENCES organisations(id) ON DELETE CASCADE,
+        category_id INTEGER REFERENCES categories(id) ON DELETE CASCADE,
+        currency TEXT,
+        support_contact TEXT,
+        bid_manager TEXT,
+        created_by INT REFERENCES users(id) ON DELETE SET NULL,
+        auction_time TIMESTAMP,
+        created_at TIMESTAMP DEFAULT NOW()
+      );
+    `);
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS users (
+        id SERIAL PRIMARY KEY,
+        name TEXT,
+        email TEXT UNIQUE,
+        password_hash TEXT,
+        role TEXT CHECK (role IN ('manager', 'bidder')) DEFAULT 'bidder',
+        organisation_id INT REFERENCES organisations(id) ON DELETE SET NULL,
+        first_name TEXT,
+        last_name TEXT,
+        created_at TIMESTAMP DEFAULT NOW()
+      );
+    `);
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS invitations (
+        id SERIAL PRIMARY KEY,
+        email TEXT UNIQUE NOT NULL,
+        role TEXT CHECK (role IN ('manager','bidder')) DEFAULT 'bidder',
+        token TEXT UNIQUE NOT NULL,
+        expires_at TIMESTAMP NOT NULL,
+        accepted BOOLEAN DEFAULT FALSE,
+        created_at TIMESTAMP DEFAULT NOW()
+      );
+    `);
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS lots (
+        id SERIAL PRIMARY KEY,
+        event_id INTEGER REFERENCES events(id) ON DELETE CASCADE,
+        title TEXT,
+        description TEXT
+      );
+    `);
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS line_items (
+        id SERIAL PRIMARY KEY,
+        lot_id INT REFERENCES lots(id) ON DELETE CASCADE,
+        item_number VARCHAR(50),
+        item_name TEXT,
+        group_number VARCHAR(50),
+        description TEXT,
+        quantity NUMERIC,
+        uom VARCHAR(50),
+        input NUMERIC,
+        required BOOLEAN,
+        ties TEXT,
+        decimals INT,
+        decrement NUMERIC,
+        opening_value NUMERIC,
+        baseline NUMERIC,
+        ext_quantity NUMERIC,
+        ext_baseline NUMERIC,
+        reserve_value NUMERIC,
+        incumbent VARCHAR(100),
+        weighting_visible BOOLEAN,
+        opening_visible BOOLEAN,
+        reserve_visible BOOLEAN,
+        created_at TIMESTAMP DEFAULT NOW()
+      );
+    `);
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS event_members (
+        id SERIAL PRIMARY KEY,
+        event_id INTEGER REFERENCES events(id) ON DELETE CASCADE,
+        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        role TEXT CHECK (role IN ('creator', 'participant', 'bidder')) DEFAULT 'participant',
+        created_at TIMESTAMP DEFAULT NOW(),
+        UNIQUE (event_id, user_id)
+      );
+    `);
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS bidder_item_assignments (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        line_item_id INTEGER REFERENCES line_items(id) ON DELETE CASCADE,
+        created_at TIMESTAMP DEFAULT NOW(),
+        UNIQUE (user_id, line_item_id)
+      );
+    `);
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS rfqs (
+        id SERIAL PRIMARY KEY,
+        event_id INTEGER REFERENCES events(id) ON DELETE CASCADE,
+        info TEXT NOT NULL,
+        publish_time TIMESTAMP NOT NULL,
+        deadline_time TIMESTAMP NOT NULL,
+        reminder_time TIMESTAMP,
+        published BOOLEAN DEFAULT FALSE,
+        created_at TIMESTAMP DEFAULT NOW()
+      );
+    `);
+    console.log("✅ Startup migrations complete.");
+  } catch (err) {
+    console.error("❌ Migration error:", err.message);
+  }
+}
+
+// Run migrations automatically on startup
 pool.connect()
-  .then(() => console.log("✅ Database connected successfully"))
+  .then(async () => {
+    console.log("✅ Database connected successfully");
+    await runMigrations();
+  })
   .catch(err => console.error("❌ Database connection failed:", err.message));
 
 // ---- User Authentication ----
@@ -1215,146 +1363,10 @@ server.listen(4000, () => {
   }
 });
 
-// ---- Migration endpoin, chagned from post to get try on  ----
-app.get("/migrate", async (req, res) => {
-  try {
-    await pool.query(`ALTER TABLE bids ADD COLUMN IF NOT EXISTS supplier_name TEXT;`);
-    await pool.query(`ALTER TABLE events ADD COLUMN IF NOT EXISTS description TEXT;`);
-    await pool.query(`ALTER TABLE events ADD COLUMN IF NOT EXISTS currency TEXT;`);
-    await pool.query(`ALTER TABLE events ADD COLUMN IF NOT EXISTS support_contact TEXT;`);
-    await pool.query(`ALTER TABLE events ADD COLUMN IF NOT EXISTS bid_manager TEXT;`);
-    await pool.query(`ALTER TABLE events ADD COLUMN IF NOT EXISTS created_by INT REFERENCES users(id) ON DELETE SET NULL;`);
-    await pool.query(`ALTER TABLE events ADD COLUMN IF NOT EXISTS auction_time TIMESTAMP;`);
-    await pool.query(`ALTER TABLE events ADD COLUMN IF NOT EXISTS organisation_id INTEGER REFERENCES organisations(id) ON DELETE CASCADE;`);
-    await pool.query(`ALTER TABLE events ADD COLUMN IF NOT EXISTS category_id INTEGER REFERENCES categories(id) ON DELETE CASCADE;`);
-    await pool.query(`ALTER TABLE events DROP COLUMN IF EXISTS organisation;`);
-    await pool.query(`ALTER TABLE lots DROP COLUMN IF EXISTS auction_time;`);
-    await pool.query(`
-      DROP TABLE IF EXISTS line_items CASCADE;
-      CREATE TABLE line_items (
-        id SERIAL PRIMARY KEY,
-        lot_id INT REFERENCES lots(id) ON DELETE CASCADE,
-
-        -- Core Info
-        item_number VARCHAR(50),
-        item_name TEXT,
-        group_number VARCHAR(50),
-        description TEXT,
-        quantity NUMERIC,
-        uom VARCHAR(50),
-
-        -- Bid Settings
-        input NUMERIC,
-        required BOOLEAN,
-        ties TEXT,
-        decimals INT,
-        decrement NUMERIC,
-        opening_value NUMERIC,
-
-        -- Evaluative Settings
-        baseline NUMERIC,
-        ext_quantity NUMERIC,
-        ext_baseline NUMERIC,
-        reserve_value NUMERIC,
-        incumbent VARCHAR(100),
-
-        -- Bid Interface Visibility
-        weighting_visible BOOLEAN,
-        opening_visible BOOLEAN,
-        reserve_visible BOOLEAN,
-
-        -- System
-        created_at TIMESTAMP DEFAULT NOW()
-      );
-    `);
-    // Migration for ties and decimals columns type
-    await pool.query(`
-      ALTER TABLE line_items
-        ALTER COLUMN ties TYPE TEXT USING ties::text,
-        ALTER COLUMN decimals TYPE INTEGER USING decimals::integer;
-    `);
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS organisations (
-        id SERIAL PRIMARY KEY,
-        name TEXT NOT NULL,
-        currency TEXT,
-        logo_url TEXT,
-        created_at TIMESTAMP DEFAULT NOW()
-      );
-    `);
-
-    // Amend users table: ensure all necessary columns exist (do not recreate)
-    await pool.query(`
-      ALTER TABLE users
-      ADD COLUMN IF NOT EXISTS name TEXT,
-      ADD COLUMN IF NOT EXISTS email TEXT UNIQUE,
-      ADD COLUMN IF NOT EXISTS password_hash TEXT,
-      ADD COLUMN IF NOT EXISTS role TEXT CHECK (role IN ('manager', 'bidder')) DEFAULT 'bidder',
-      ADD COLUMN IF NOT EXISTS organisation_id INT REFERENCES organisations(id) ON DELETE SET NULL,
-      ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT NOW();
-    `);
-    await pool.query(`
-      ALTER TABLE users
-      ADD COLUMN IF NOT EXISTS first_name TEXT,
-      ADD COLUMN IF NOT EXISTS last_name TEXT;
-    `);
-
-    // Create invitations table if it doesn't exist
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS invitations (
-        id SERIAL PRIMARY KEY,
-        email TEXT UNIQUE NOT NULL,
-        role TEXT CHECK (role IN ('manager','bidder')) DEFAULT 'bidder',
-        token TEXT UNIQUE NOT NULL,
-        expires_at TIMESTAMP NOT NULL,
-        accepted BOOLEAN DEFAULT FALSE,
-        created_at TIMESTAMP DEFAULT NOW()
-      );
-    `);
-
-    // === CATEGORY MIGRATIONS ===
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS categories (
-        id SERIAL PRIMARY KEY,
-        organisation_id INTEGER REFERENCES organisations(id) ON DELETE CASCADE,
-        name VARCHAR(255) NOT NULL,
-        description TEXT,
-        created_at TIMESTAMP DEFAULT NOW()
-      );
-    `);
-
-    // === EVENT MEMBERS TABLE ===
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS event_members (
-        id SERIAL PRIMARY KEY,
-        event_id INTEGER REFERENCES events(id) ON DELETE CASCADE,
-        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
-        role TEXT CHECK (role IN ('creator', 'participant', 'bidder')) DEFAULT 'participant',
-        created_at TIMESTAMP DEFAULT NOW(),
-        UNIQUE (event_id, user_id)
-      );
-    `);
-
-    // === BIDDER ITEM ASSIGNMENTS TABLE ===
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS bidder_item_assignments (
-        id SERIAL PRIMARY KEY,
-        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
-        line_item_id INTEGER REFERENCES line_items(id) ON DELETE CASCADE,
-        created_at TIMESTAMP DEFAULT NOW(),
-        UNIQUE (user_id, line_item_id)
-      );
-    `);
-
-    res.json({
-      success: true,
-      message:
-        "Migration completed (bids, events, lots, line_items, organisations, users columns, invitations, categories, organisation_id/category_id ensured, and old organisation column removed from events, event_members, bidder_item_assignments)",
-    });
-  } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
-  }
-});
+// The /migrate route is now redundant; migrations run automatically on startup.
+// app.get("/migrate", async (req, res) => {
+//   res.status(410).json({ error: "Migrations now run automatically on startup." });
+// });
 
 // === Get all events a bidder is assigned to ===
 app.get("/bidders/:userId/events", ensureAuthenticated, async (req, res) => {
