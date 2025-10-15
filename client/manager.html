@@ -12,6 +12,7 @@
   <script>
   window.requiredRoles = ["manager"];
 </script>
+  <script src="/config.js"></script>
   <script src="/auth.js"></script>
 </head>
 
@@ -51,5 +52,11 @@
   <script src="/socket.io/socket.io.js"></script>
   <!-- Enable messaging script -->
   <script src="/messages.js"></script>
+  <script>
+    const user = JSON.parse(localStorage.getItem("user"));
+    if (user && (user.first_name || user.last_name)) {
+      document.getElementById("welcome").textContent = `Welcome, ${user.first_name || ""} ${user.last_name || ""}`.trim() + "!";
+    }
+  </script>
 </body>
 </html>
