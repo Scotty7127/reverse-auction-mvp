@@ -1468,22 +1468,6 @@ app.delete("/categories/:id", ensureAuthenticated, async (req, res) => {
 
 // === RFQ (Request for Quotation) Management ===
 
-// Ensure RFQ table exists
-(async () => {
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS rfqs (
-      id SERIAL PRIMARY KEY,
-      event_id INTEGER REFERENCES events(id) ON DELETE CASCADE,
-      info TEXT NOT NULL,
-      publish_time TIMESTAMP NOT NULL,
-      deadline_time TIMESTAMP NOT NULL,
-      reminder_time TIMESTAMP,
-      published BOOLEAN DEFAULT FALSE,
-      created_at TIMESTAMP DEFAULT NOW()
-    );
-  `);
-})();
-
 // Get RFQ for an event
 app.get("/events/:id/rfq", ensureAuthenticated, async (req, res) => {
   try {
