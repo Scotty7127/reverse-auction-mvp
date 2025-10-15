@@ -38,13 +38,20 @@ const storage = multer.diskStorage({
 const upload = multer({ storage });
 
 // ---- Database connection ----
+const isProduction = process.env.NODE_ENV === "production";
+
 const pool = new Pool({
-  user: "postgres",        // your Postgres user
-  host: "localhost",
-  database: "auctiondb",   // the DB
-  password: "scotty2004", // ⚠️ replace with your actual Postgres password
-  port: 5432,
+  connectionString: isProduction
+    ? process.env.DATABASE_URL         // Use Neon when in production
+    : process.env.LOCAL_DATABASE_URL,  // Use local DB when testing locally
+  ssl: isProduction ? { rejectUnauthorized: false } : false,
 });
+
+console.log(isProduction ? "🌐 Running in production (Render/Neon)" : "💻 Running locally (localhost Postgres)");
+
+pool.connect()
+  .then(() => console.log("✅ Database connected successfully"))
+  .catch(err => console.error("❌ Database connection failed:", err.message));
 
 // ---- User Authentication ----
 const SECRET = "supersecret"; // You can change this to a stronger secret in production
@@ -1200,8 +1207,12 @@ io.on("connection", (socket) => {
 // ---- Start server ----
 server.listen(4000, () => {
   const url = "http://localhost:4000/start.html";
-  console.log(`✅ Server running on ${url}`);
-  open(url).catch(err => console.error("Could not open browser:", err));
+  if (!isProduction) {
+    console.log(`✅ Local server running on ${url}`);
+    open(url).catch(err => console.error("Could not open browser:", err));
+  } else {
+    console.log("🌐 Server running in production (Render)");
+  }
 });
 
 // ---- Migration endpoin, chagned from post to get try on  ----
