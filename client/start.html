@@ -101,7 +101,7 @@
   </div>
 
   <script>
-    const apiBase = "http://localhost:4000";
+    const apiBase = window.location.origin;
 
     document.getElementById("loginForm").addEventListener("submit", async (e) => {
       e.preventDefault();
