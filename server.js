@@ -1204,8 +1204,8 @@ server.listen(4000, () => {
   open(url).catch(err => console.error("Could not open browser:", err));
 });
 
-// ---- Migration endpoint ----
-app.post("/migrate", async (req, res) => {
+// ---- Migration endpoin, chagned from post to get try on  ----
+app.get("/migrate", async (req, res) => {
   try {
     await pool.query(`ALTER TABLE bids ADD COLUMN IF NOT EXISTS supplier_name TEXT;`);
     await pool.query(`ALTER TABLE events ADD COLUMN IF NOT EXISTS description TEXT;`);
