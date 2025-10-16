@@ -331,7 +331,7 @@ app.post("/invite", async (req, res) => {
       },
     });
 
-    const inviteLink = `http://localhost:4000/invite/${token}`;
+    const inviteLink = `https://reverse-auction-mvp.onrender.com/invite/${token}`;
     try {
       await transporter.sendMail({
         from: '"TenderSmith Auctions"" <yourcompany@gmail.com>',

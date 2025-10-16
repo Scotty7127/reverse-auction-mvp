@@ -7,6 +7,10 @@
   <!-- Bootstrap CSS -->
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
+  <script>
+    window.requiredRoles = ["manager"];
+  </script>
+  <script src="/config.js"></script>
   <script src="/auth.js"></script>
   <style>
     form {
@@ -104,7 +108,7 @@
 
     async function fetchOrganisations() {
       try {
-        const res = await authFetch('http://localhost:4000/organisations');
+        const res = await authFetch('/organisations');
         if (!res.ok) throw new Error('Failed to load organisations');
         const organisations = await res.json();
         orgEl.innerHTML = '<option value="">Select Organisation</option>';
@@ -123,7 +127,7 @@
       catEl.innerHTML = '<option value="">Select Category</option>';
       if (!orgId) return;
       try {
-        const res = await authFetch(`http://localhost:4000/organisations/${orgId}/categories`);
+        const res = await authFetch(`/organisations/${orgId}/categories`);
         if (!res.ok) throw new Error('Failed to load categories');
         const categories = await res.json();
         categories.forEach(cat => {
@@ -145,7 +149,7 @@
 
     async function loadEventDetails() {
       try {
-        const res = await authFetch(`http://localhost:4000/events/${eventId}`);
+        const res = await authFetch(`/events/${eventId}`);
         if (!res.ok) throw new Error('Failed to load event');
         const event = await res.json();
         titleEl.value = event.title;
@@ -196,8 +200,8 @@
 
       const method = eventId ? 'PUT' : 'POST';
       const url = eventId
-        ? `http://localhost:4000/events/${eventId}`
-        : 'http://localhost:4000/events';
+        ? `/events/${eventId}`
+        : '/events';
 
       try {
         const res = await authFetch(url, {
