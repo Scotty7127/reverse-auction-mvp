@@ -410,6 +410,33 @@ app.post("/invite/accept", async (req, res) => {
       [token]
     );
 
+    // Notify admin of new user account creation
+    try {
+      const transporter = nodemailer.createTransport({
+        service: "gmail",
+        auth: {
+          user: process.env.EMAIL_USER,
+          pass: process.env.EMAIL_PASS,
+        },
+      });
+
+      const mailOptions = {
+        from: `"TenderSmith Auctions" <${process.env.EMAIL_USER}>`,
+        to: "scotty@tendersmith.com", // account creatiion confirmation of new users will be sent here
+        subject: "New User Account Created",
+        text: `A new user has created an account via invite:
+Name: ${first_name} ${last_name}
+Email: ${email}
+Role: ${role}
+Created at: ${new Date().toLocaleString()}`,
+      };
+
+      await transporter.sendMail(mailOptions);
+      console.log("✅ Admin notified of new user creation");
+    } catch (notifyErr) {
+      console.error("⚠️ Failed to send new user notification:", notifyErr);
+    }
+
     res.json({ success: true, user: userInsert.rows[0] });
   } catch (err) {
     console.error("Error accepting invitation:", err);
