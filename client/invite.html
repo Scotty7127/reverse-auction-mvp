@@ -47,9 +47,9 @@
     <div id="msg" style="color:red;"></div>
   </div>
 
+  <script src="/config.js"></script>
   <script>
     const token = window.location.pathname.split("/").pop();
-    const apiBase = "http://localhost:4000";
 
     document.getElementById("inviteForm").addEventListener("submit", async (e) => {
       e.preventDefault();
@@ -65,7 +65,7 @@
         return;
       }
 
-      const res = await fetch(`${apiBase}/invite/accept`, {
+      const res = await fetch(`${window.apiBase}/invite/accept`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ token, password, first_name, last_name }),
