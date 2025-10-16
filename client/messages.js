@@ -1,5 +1,6 @@
 // messages.js
-const socket = io("http://localhost:4000");
+// Uses global apiBase defined in config.js
+const socket = io(window.location.origin.includes("localhost") ? "http://localhost:4000" : window.location.origin);
 let currentUser = null;
 let activeChat = null;
 let users = [];
