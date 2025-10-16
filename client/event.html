@@ -456,18 +456,26 @@
         managerList.innerHTML = "";
         const managers = users.filter(u => u.role === "manager");
         managers.sort((a, b) => (a.id === event.created_by ? -1 : b.id === event.created_by ? 1 : 0));
+
+        const assignedManagerIds = new Set(
+          members.filter(m => m.role === "manager").map(m => m.user_id)
+        );
+
         managers.forEach(u => {
           const isCreator = u.id === event.created_by;
+          const checked = assignedManagerIds.has(u.id) || isCreator;
           const row = document.createElement("div");
           row.innerHTML = `
             <div>
               <strong>${(u.first_name || "")} ${(u.last_name || "")}${isCreator ? " (Creator)" : ""}</strong><br>
               <small>${u.email}</small>
             </div>
-            <input type="checkbox" disabled ${isCreator ? "checked" : ""} />
+            <input type="checkbox" class="manager-assign" data-user-id="${u.id}" ${checked ? "checked" : ""} ${isCreator ? "disabled" : ""}/>
           `;
           managerList.appendChild(row);
         });
+
+        window._currentAssignedManagerIds = assignedManagerIds;
 
         const bidderList = document.getElementById("bidderList");
         bidderList.innerHTML = "";
@@ -500,39 +508,49 @@
       }
     }
 
-    // Save bidder assignments: add new ones, remove unchecked ones
+    // Save member assignments: managers and bidders
     document.getElementById("save-members-btn").addEventListener("click", async () => {
       const params = new URLSearchParams(window.location.search);
       const eventId = params.get('id');
       if (!eventId) return;
 
-      const checkedIds = new Set(
+      const checkedBidders = new Set(
         Array.from(document.querySelectorAll(".bidder-assign:checked")).map(cb => parseInt(cb.dataset.userId, 10))
       );
-      const before = window._currentAssignedBidderIds || new Set();
+      const checkedManagers = new Set(
+        Array.from(document.querySelectorAll(".manager-assign:checked")).map(cb => parseInt(cb.dataset.userId, 10))
+      );
 
-      // Determine adds and removals
-      const toAdd = [...checkedIds].filter(id => !before.has(id));
-      const toRemove = [...before].filter(id => !checkedIds.has(id));
+      const beforeBidders = window._currentAssignedBidderIds || new Set();
+      const beforeManagers = window._currentAssignedManagerIds || new Set();
+
+      const toAddBidders = [...checkedBidders].filter(id => !beforeBidders.has(id));
+      const toRemoveBidders = [...beforeBidders].filter(id => !checkedBidders.has(id));
+      const toAddManagers = [...checkedManagers].filter(id => !beforeManagers.has(id));
+      const toRemoveManagers = [...beforeManagers].filter(id => !checkedManagers.has(id));
 
       try {
-        // Apply adds
-        for (const user_id of toAdd) {
+        for (const user_id of toAddBidders)
           await authFetch(`/events/${eventId}/members`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ user_id, role: "bidder" })
           });
-        }
-        // Apply removals
-        for (const user_id of toRemove) {
-          await authFetch(`/events/${eventId}/members/${user_id}`, {
-            method: "DELETE"
-          });
-        }
 
-        alert("✅ Bidder assignments saved.");
-        // Reload to refresh state
+        for (const user_id of toRemoveBidders)
+          await authFetch(`/events/${eventId}/members/${user_id}`, { method: "DELETE" });
+
+        for (const user_id of toAddManagers)
+          await authFetch(`/events/${eventId}/members`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ user_id, role: "manager" })
+          });
+
+        for (const user_id of toRemoveManagers)
+          await authFetch(`/events/${eventId}/members/${user_id}`, { method: "DELETE" });
+
+        alert("✅ Member assignments saved.");
         await loadUsersAndMembers(eventId);
       } catch (e) {
         console.error("Error saving assignments:", e);
