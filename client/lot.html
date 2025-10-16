@@ -7,6 +7,10 @@
   <!-- Bootstrap CSS -->
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
   <link rel="stylesheet" href="style.css" />
+  <script>
+    window.requiredRoles = ["manager"];
+  </script>
+  <script src="/config.js"></script>
   <script src="/auth.js"></script>
 </head>
 <body>
@@ -78,10 +82,9 @@
   <script>
     const params = new URLSearchParams(window.location.search);
     const lotId = params.get("id");
-    const apiBase = "http://localhost:4000";
 
     async function loadLot() {
-      const res = await authFetch(`${apiBase}/lots/${lotId}`);
+      const res = await authFetch(`/lots/${lotId}`);
       const lot = await res.json();
       document.getElementById("lot-title").textContent = lot.title;
       document.getElementById("lot-description").textContent = lot.description || "";
@@ -93,7 +96,7 @@
     }
 
     async function loadLineItems() {
-      const res = await authFetch(`${apiBase}/lots/${lotId}/line-items`);
+      const res = await authFetch(`/lots/${lotId}/line-items`);
       const items = await res.json();
       const tbody = document.querySelector("#line-items-table tbody");
       tbody.innerHTML = "";
@@ -131,7 +134,7 @@
       delBtn.className = "delete-btn-small";
       delBtn.onclick = async () => {
         if (item.id && confirm("Delete this line item?")) {
-          await authFetch(`${apiBase}/line-items/${item.id}`, { method: "DELETE" });
+          await authFetch(`/line-items/${item.id}`, { method: "DELETE" });
           tr.remove();
         } else {
           tr.remove();
@@ -153,14 +156,14 @@
 
         if (row.dataset.id) {
           // update
-          await authFetch(`${apiBase}/line-items/${row.dataset.id}`, {
+          await authFetch(`/line-items/${row.dataset.id}`, {
             method: "PUT",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(payload)
           });
         } else {
           // create
-          const res = await authFetch(`${apiBase}/lots/${lotId}/line-items`, {
+          const res = await authFetch(`/lots/${lotId}/line-items`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(payload)
@@ -175,7 +178,7 @@
 //back to lots in event
     async function goBack() {
       try {
-        const res = await authFetch(`${apiBase}/lots/${lotId}`);
+        const res = await authFetch(`/lots/${lotId}`);
         const lot = await res.json();
         if (lot.event_id) {
           window.location.href = `event.html?id=${lot.event_id}&tab=lots`;
@@ -189,7 +192,7 @@
     }
 
     async function exportExcel() {
-      const res = await authFetch(`${apiBase}/lots/${lotId}/line-items/export`);
+      const res = await authFetch(`/lots/${lotId}/line-items/export`);
       const blob = await res.blob();
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement("a");
@@ -204,7 +207,7 @@
       if (!file) return;
       const formData = new FormData();
       formData.append("file", file);
-      await authFetch(`${apiBase}/lots/${lotId}/line-items/import`, {
+      await authFetch(`/lots/${lotId}/line-items/import`, {
         method: "POST",
         body: formData
       });

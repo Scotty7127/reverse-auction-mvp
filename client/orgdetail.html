@@ -5,6 +5,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Organisation Details</title>
   <link rel="stylesheet" href="style.css">
+  <script>
+    window.requiredRoles = ["manager"];
+  </script>
+  <script src="/config.js"></script>
+  <script src="/auth.js"></script>
 </head>
 <body>
   <header>
@@ -64,10 +69,9 @@
     </section>
   </main>
 
-  <!-- Make sure auth.js loads before any custom scripts -->
-  <script src="/auth.js"></script>
+  
   <script>
-    const apiBase = "http://localhost:4000";
+    // Uses global apiBase defined in config.js
     const params = new URLSearchParams(window.location.search);
     const orgId = params.get("id");
 
@@ -78,7 +82,7 @@
     // Ensure authenticated via API and store current user
     async function ensureAuth() {
       try {
-        const res = await authFetch(`${apiBase}/users/me`);
+        const res = await authFetch("/users/me");
         if (!res.ok) throw new Error("unauthorized");
         const me = await res.json();
         window.currentUser = me;
@@ -95,7 +99,7 @@
       if (!orgId) return;
       title.textContent = "Edit Organisation";
 
-      const res = await authFetch(`${apiBase}/organisations/${orgId}`);
+      const res = await authFetch(`/organisations/${orgId}`);
       const org = await res.json();
 
       document.getElementById("org-name").value = org.name || "";
@@ -108,7 +112,7 @@
 
       const formData = new FormData(form);
       let method = orgId ? "PUT" : "POST";
-      let endpoint = orgId ? `${apiBase}/organisations/${orgId}` : `${apiBase}/organisations`;
+      let endpoint = orgId ? `/organisations/${orgId}` : "/organisations";
 
       const res = await authFetch(endpoint, { method, body: formData });
       if (res.ok) {
@@ -154,7 +158,7 @@
         return;
       }
       try {
-        const res = await authFetch(`${apiBase}/organisations/${orgId}/categories`);
+        const res = await authFetch(`/organisations/${orgId}/categories`);
         if (res.ok) {
           const categories = await res.json();
           renderCategories(categories);
@@ -246,7 +250,7 @@
         let requestUrl, requestOptions;
         if (editingCategoryId) {
           // Update existing category
-          requestUrl = `${apiBase}/categories/${editingCategoryId}`;
+          requestUrl = `/categories/${editingCategoryId}`;
           requestOptions = {
             method: "PUT",
             headers: { "Content-Type": "application/json" },
@@ -254,7 +258,7 @@
           };
         } else {
           // Create new category
-          requestUrl = `${apiBase}/organisations/${orgId}/categories`;
+          requestUrl = `/organisations/${orgId}/categories`;
           requestOptions = {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -297,7 +301,7 @@
     async function deleteCategory(id) {
       if (!confirm("Are you sure you want to delete this category?")) return;
       try {
-        const res = await authFetch(`${apiBase}/categories/${id}`, { method: "DELETE" });
+        const res = await authFetch(`/categories/${id}`, { method: "DELETE" });
         if (res.ok) {
           alert("✅ Category deleted successfully!");
           fetchCategories();
