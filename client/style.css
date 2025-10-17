@@ -43,6 +43,7 @@ p {
   max-width: 1200px;
   margin: 0 auto;
   padding: 10px 30px;
+  gap: 20px;
 }
 
 .brand {
@@ -56,9 +57,10 @@ p {
 .nav-links {
   list-style: none;
   display: flex;
-  gap: 30px;
+  align-items: center;
+  gap: 24px;
   margin: 0;
-  padding: 20;
+  padding: 0;
 }
 
 .nav-links a {
@@ -225,15 +227,28 @@ footer {
 .nav-icon-btn {
   background: none;
   border: none;
-  font-size: 1.4rem;
+  font-size: 1.3rem;
   cursor: pointer;
-  color: white;
-  transition: transform 0.2s ease;
+  color: #f8fafc;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  transition: transform 0.2s ease, color 0.2s ease;
 }
 
 .nav-icon-btn:hover {
   transform: scale(1.1);
-  color: #ffc107;
+  color: #38bdf8;
+}
+
+@media (max-width: 768px) {
+  .nav-links {
+    gap: 16px;
+  }
+  .nav-icon-btn {
+    font-size: 1.5rem;
+  }
 }
 
 /* === Event Cards (Professional Layout) === */

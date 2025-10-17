@@ -50,10 +50,18 @@
   </style>
 </head>
 <body>
-  <header><h1 id="page-title">Create Lot</h1></header>
-  <nav>
-    <a href="manager.html">🏠 Home</a>
-    <a href="events.html">📅 Events</a>
+  <nav class="navbar">
+    <div class="nav-container">
+      <a href="manager.html" class="brand">Tendersmith</a>
+      <ul class="nav-links">
+        <li><a href="manager.html">Home</a></li>
+        <li><a href="events.html">Events</a></li>
+        <li><a href="organisations.html">Organisations</a></li>
+        <li><a href="stats.html">Stats</a></li>
+        <li><a href="account.html">Account</a></li>
+        <li><button id="messages-btn" class="nav-icon-btn">💬</button></li>
+      </ul>
+    </div>
   </nav>
 
   <main>
@@ -141,5 +149,9 @@
   </footer>
   <!-- Bootstrap JS (for optional interactivity) -->
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <!-- Socket.IO client -->
+  <script src="/socket.io/socket.io.js"></script>
+  <!-- Enable messaging script -->
+  <script src="/messages.js"></script>
 </body>
 </html>
