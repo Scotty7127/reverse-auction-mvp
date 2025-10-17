@@ -212,6 +212,18 @@ async function runMigrations() {
         read BOOLEAN DEFAULT FALSE
       );
     `);
+
+    // === Create Bids table (for auctions) ===
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS bids (
+        id SERIAL PRIMARY KEY,
+        event_id INTEGER REFERENCES events(id) ON DELETE CASCADE,
+        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        line_item_id INTEGER REFERENCES line_items(id) ON DELETE CASCADE,
+        amount NUMERIC(12,2) NOT NULL,
+        created_at TIMESTAMP DEFAULT NOW()
+      );
+    `);
     console.log("✅ Startup migrations complete.");
   } catch (err) {
     console.error("❌ Migration error:", err.message);
@@ -510,9 +522,75 @@ io.on("connection", (socket) => {
     console.log(`Client joined lot ${lotId}`);
   });
 
+  // === Auction Real-Time Events ===
+  socket.on("join_event", (eventId) => {
+    socket.join(`event_${eventId}`);
+    console.log(`Client joined event ${eventId}`);
+    io.to(`event_${eventId}`).emit("bidders_count_update");
+  });
+
+  socket.on("new_bid", async (data) => {
+    try {
+      const { event_id, user_id, line_item_id, amount } = data;
+      const result = await pool.query(
+        `INSERT INTO bids (event_id, user_id, line_item_id, amount)
+         VALUES ($1, $2, $3, $4)
+         RETURNING *`,
+        [event_id, user_id, line_item_id || null, amount]
+      );
+      const bid = result.rows[0];
+      io.to(`event_${event_id}`).emit("bid_update", bid);
+    } catch (err) {
+      console.error("Error saving socket bid:", err);
+    }
+  });
+
   socket.on("disconnect", () => {
     console.log("Client disconnected");
   });
+});
+
+// === Submit a new bid ===
+app.post("/events/:id/bids", ensureAuthenticated, async (req, res) => {
+  try {
+    const { amount, line_item_id } = req.body;
+    const eventId = req.params.id;
+    const userId = req.user.id;
+
+    if (!amount || isNaN(amount)) {
+      return res.status(400).json({ error: "Invalid bid amount" });
+    }
+
+    const result = await pool.query(
+      `INSERT INTO bids (event_id, user_id, line_item_id, amount)
+       VALUES ($1, $2, $3, $4)
+       RETURNING *`,
+      [eventId, userId, line_item_id || null, amount]
+    );
+
+    const bid = result.rows[0];
+    io.to(`event_${eventId}`).emit("bid_update", bid);
+    res.json(bid);
+  } catch (err) {
+    console.error("Error submitting bid:", err);
+    res.status(500).json({ error: "Failed to submit bid" });
+  }
+});
+
+// === Pause Auction ===
+app.patch("/events/:id/pause", ensureAuthenticated, async (req, res) => {
+  if (req.user.role !== "manager") return res.status(403).json({ error: "Only managers can pause auctions" });
+  await pool.query("UPDATE events SET type = 'paused' WHERE id=$1", [req.params.id]);
+  io.to(`event_${req.params.id}`).emit("auction_paused");
+  res.json({ success: true });
+});
+
+// === Resume Auction ===
+app.patch("/events/:id/resume", ensureAuthenticated, async (req, res) => {
+  if (req.user.role !== "manager") return res.status(403).json({ error: "Only managers can resume auctions" });
+  await pool.query("UPDATE events SET type = 'open' WHERE id=$1", [req.params.id]);
+  io.to(`event_${req.params.id}`).emit("auction_resumed");
+  res.json({ success: true });
 });
 
 // ---- Events Management ----
