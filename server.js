@@ -1771,3 +1771,48 @@ app.get("/events/:id/bids", ensureAuthenticated, async (req, res) => {
     res.status(500).json({ error: "Failed to fetch bids" });
   }
 });
+
+// === Get Live Auction Stats ===
+app.get("/events/:id/stats", ensureAuthenticated, async (req, res) => {
+  try {
+    const eventId = req.params.id;
+
+    // Get total bids and most recent timestamp
+    const bids = await pool.query(
+      `SELECT COUNT(*) AS total_bids, MAX(created_at) AS last_bid_time FROM bids WHERE event_id=$1`,
+      [eventId]
+    );
+
+    // Get total unique bidders
+    const uniqueBidders = await pool.query(
+      `SELECT COUNT(DISTINCT user_id) AS bidders_connected FROM bids WHERE event_id=$1`,
+      [eventId]
+    );
+
+    // Get total event members (for bidder count)
+    const totalMembers = await pool.query(
+      `SELECT COUNT(*) AS total_bidders FROM event_members WHERE event_id=$1 AND role='bidder'`,
+      [eventId]
+    );
+
+    // Get event details for countdown
+    const eventResult = await pool.query(
+      `SELECT auction_time, type FROM events WHERE id=$1`,
+      [eventId]
+    );
+    const event = eventResult.rows[0];
+
+    res.json({
+      total_bids: Number(bids.rows[0].total_bids || 0),
+      bidders_connected: Number(uniqueBidders.rows[0].bidders_connected || 0),
+      total_bidders: Number(totalMembers.rows[0].total_bidders || 0),
+      last_bid_time: bids.rows[0].last_bid_time,
+      auction_time: event ? event.auction_time : null,
+      type: event ? event.type : null,
+      extensions: 0 // placeholder for now until extension tracking is implemented
+    });
+  } catch (err) {
+    console.error("Error fetching live auction stats:", err);
+    res.status(500).json({ error: "Failed to fetch auction stats" });
+  }
+});

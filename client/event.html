@@ -179,10 +179,10 @@
       </div>
 
       <script>
-        // Placeholder: Auction Dashboard Logic
-        let auctionStartTime = null;
+        let socket;
         let auctionEndTime = null;
         let countdownInterval = null;
+        let eventId = null;
 
         // Countdown Timer
         function startCountdown(endTime) {
@@ -203,104 +203,123 @@
           }, 1000);
         }
 
-        // Load auction start info
-        async function loadAuctionInfo() {
-          const params = new URLSearchParams(window.location.search);
-          const id = params.get('id');
-          if (!id) return;
-
+        // Load Auction Stats from backend
+        async function loadAuctionStats() {
           try {
-            const res = await authFetch(`/events/${id}`);
-            const event = await res.json();
-            if (event.auction_time) {
-              const start = new Date(event.auction_time);
-              auctionStartTime = start;
+            const res = await authFetch(`/events/${eventId}/stats`);
+            const stats = await res.json();
+            document.getElementById('total-bids').textContent = stats.total_bids || 0;
+            document.getElementById('extensions-count').textContent = stats.extensions || 0;
+            document.getElementById('bidders-connected').textContent =
+              `${stats.bidders_connected || 0} / ${stats.total_bidders || 0}`;
+
+            if (stats.auction_time) {
+              const start = new Date(stats.auction_time);
               document.getElementById('auction-start-time').textContent = start.toLocaleString();
-              // For demo purposes, let's assume auction lasts 1 hour
               auctionEndTime = new Date(start.getTime() + 60 * 60 * 1000);
               startCountdown(auctionEndTime);
             }
           } catch (err) {
-            console.error('Failed to load auction info:', err);
+            console.error("Error loading auction stats:", err);
           }
         }
 
-        // Mock: Update summary stats
-        function updateAuctionStats() {
-          document.getElementById('total-bids').textContent = 12;
-          document.getElementById('extensions-count').textContent = 1;
-          document.getElementById('bidders-connected').textContent = '3 / 5';
+        // Fetch all bids to populate tables
+        async function loadBids() {
+          try {
+            const res = await authFetch(`/events/${eventId}/bids`);
+            const bids = await res.json();
+            updateBidTables(bids);
+          } catch (err) {
+            console.error("Error loading bids:", err);
+          }
         }
 
-        // Mock: Populate ranked bidders table
-        function populateRankedBidders() {
+        // Update Ranked Bidders and Bid Stream
+        function updateBidTables(bids) {
           const tbody = document.getElementById('ranked-bidders-body');
-          const mockData = [
-            { rank: 1, bidder: 'Company A', savings: '12%', bid: '$9,800', time: '12:03:25' },
-            { rank: 2, bidder: 'Company B', savings: '10%', bid: '$10,000', time: '12:02:11' },
-            { rank: 3, bidder: 'Company C', savings: '8%', bid: '$10,200', time: '12:01:50' }
-          ];
-          tbody.innerHTML = mockData.map(r => `
+          const bidStream = document.getElementById('bid-stream');
+
+          if (!bids || bids.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="5" class="text-center">No bids yet</td></tr>';
+            bidStream.innerHTML = '<p class="text-muted">Waiting for bids...</p>';
+            return;
+          }
+
+          // Group bids by bidder, take latest bid per user
+          const latestBids = {};
+          bids.forEach(b => {
+            if (!latestBids[b.user_id] || new Date(b.created_at) > new Date(latestBids[b.user_id].created_at)) {
+              latestBids[b.user_id] = b;
+            }
+          });
+          const ranked = Object.values(latestBids).sort((a, b) => a.amount - b.amount);
+
+          tbody.innerHTML = ranked.map((b, i) => `
             <tr>
-              <td>${r.rank}</td>
-              <td>${r.bidder}</td>
-              <td>${r.savings}</td>
-              <td>${r.bid}</td>
-              <td>${r.time}</td>
+              <td>${i + 1}</td>
+              <td>${b.user_name || "Bidder " + b.user_id}</td>
+              <td>${(((ranked[0].amount - b.amount) / ranked[0].amount) * 100).toFixed(2)}%</td>
+              <td>$${b.amount.toLocaleString()}</td>
+              <td>${new Date(b.created_at).toLocaleTimeString()}</td>
             </tr>
           `).join('');
+
+          bidStream.innerHTML = bids
+            .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+            .map(b => `
+              <div class="bid-entry">
+                <span><strong>#${b.id}</strong></span>
+                <span>${new Date(b.created_at).toLocaleTimeString()}</span>
+                <span>${b.user_name || "Bidder " + b.user_id}</span>
+                <span>${b.line_item_id || "-"}</span>
+                <span>$${b.amount.toLocaleString()}</span>
+              </div>
+            `)
+            .join('');
         }
 
-        // Mock: Populate live bid stream
-        function populateBidStream() {
-          const container = document.getElementById('bid-stream');
-          const bids = [
-            { id: 101, time: '00:02:15', bidder: 'Company B', line: 'Item 3', amount: '$10,000' },
-            { id: 102, time: '00:03:10', bidder: 'Company A', line: 'Item 3', amount: '$9,800' },
-            { id: 103, time: '00:03:45', bidder: 'Company C', line: 'Item 3', amount: '$10,200' }
-          ];
-          container.innerHTML = bids.map(b => `
-            <div class="bid-entry">
-              <span><strong>#${b.id}</strong></span>
-              <span>${b.time}</span>
-              <span>${b.bidder}</span>
-              <span>${b.line}</span>
-              <span>${b.amount}</span>
-            </div>
-          `).join('');
-        }
+        // Connect to WebSocket for live updates
+        function connectSocket() {
+          socket = io();
+          socket.emit("join_event", eventId);
 
-        // Initialize chart
-        function initChart() {
-          const ctx = document.getElementById('bid-chart').getContext('2d');
-          new Chart(ctx, {
-            type: 'line',
-            data: {
-              labels: ['12:00', '12:05', '12:10'],
-              datasets: [{
-                label: 'Bid Value',
-                data: [10500, 10000, 9800],
-                borderColor: '#007bff',
-                fill: false,
-              }]
-            },
-            options: {
-              responsive: true,
-              scales: {
-                y: { beginAtZero: false, title: { display: true, text: 'Bid Amount ($)' } },
-                x: { title: { display: true, text: 'Time' } }
-              }
-            }
+          socket.on("bid_update", (bid) => {
+            console.log("New bid received:", bid);
+            loadBids();
+            loadAuctionStats();
+          });
+
+          socket.on("bidders_count_update", loadAuctionStats);
+
+          socket.on("auction_paused", () => {
+            alert("⏸️ Auction has been paused by manager.");
+          });
+
+          socket.on("auction_resumed", () => {
+            alert("▶️ Auction resumed.");
           });
         }
 
-        // Initialize Auction Dashboard
-        document.addEventListener('DOMContentLoaded', () => {
-          loadAuctionInfo();
-          updateAuctionStats();
-          populateRankedBidders();
-          populateBidStream();
-          initChart();
+        // Pause auction handler
+        document.getElementById("pause-auction-btn").addEventListener("click", async () => {
+          if (!confirm("Pause this auction?")) return;
+          try {
+            const res = await authFetch(`/events/${eventId}/pause`, { method: "PATCH" });
+            if (res.ok) alert("Auction paused.");
+          } catch (err) {
+            console.error("Error pausing auction:", err);
+          }
+        });
+
+        // Initialize dashboard
+        document.addEventListener("DOMContentLoaded", async () => {
+          const params = new URLSearchParams(window.location.search);
+          eventId = params.get("id");
+          if (!eventId) return;
+          await loadAuctionStats();
+          await loadBids();
+          connectSocket();
         });
       </script>
     </section>
