@@ -224,6 +224,10 @@ async function runMigrations() {
         created_at TIMESTAMP DEFAULT NOW()
       );
     `);
+    // Ensure legacy DBs have required bid columns
+    await pool.query(`ALTER TABLE bids ADD COLUMN IF NOT EXISTS event_id INTEGER REFERENCES events(id) ON DELETE CASCADE;`);
+    await pool.query(`ALTER TABLE bids ADD COLUMN IF NOT EXISTS line_item_id INTEGER REFERENCES line_items(id) ON DELETE CASCADE;`);
+    await pool.query(`ALTER TABLE bids ADD COLUMN IF NOT EXISTS user_id INTEGER REFERENCES users(id) ON DELETE CASCADE;`);
     console.log("✅ Startup migrations complete.");
   } catch (err) {
     console.error("❌ Migration error:", err.message);
@@ -574,6 +578,41 @@ app.post("/events/:id/bids", ensureAuthenticated, async (req, res) => {
   } catch (err) {
     console.error("Error submitting bid:", err);
     res.status(500).json({ error: "Failed to submit bid" });
+  }
+});
+
+// === Bulk Bid Submission ===
+app.post("/events/:id/bids/bulk", ensureAuthenticated, async (req, res) => {
+  try {
+    const eventId = req.params.id;
+    const userId = req.user.id;
+    const { bids } = req.body;
+
+    if (!Array.isArray(bids) || bids.length === 0) {
+      return res.status(400).json({ error: "No bids provided" });
+    }
+
+    const insertedBids = [];
+    for (const bid of bids) {
+      const { line_item_id, amount } = bid;
+      if (!line_item_id || isNaN(amount)) continue;
+
+      const result = await pool.query(
+        `INSERT INTO bids (event_id, user_id, line_item_id, amount)
+         VALUES ($1, $2, $3, $4)
+         RETURNING *`,
+        [eventId, userId, line_item_id, amount]
+      );
+      insertedBids.push(result.rows[0]);
+
+      // Broadcast each bid update in real-time
+      io.to(`event_${eventId}`).emit("bid_update", result.rows[0]);
+    }
+
+    res.json({ success: true, inserted: insertedBids.length });
+  } catch (err) {
+    console.error("Error submitting bulk bids:", err);
+    res.status(500).json({ error: "Failed to submit bulk bids" });
   }
 });
 
@@ -1814,5 +1853,110 @@ app.get("/events/:id/stats", ensureAuthenticated, async (req, res) => {
   } catch (err) {
     console.error("Error fetching live auction stats:", err);
     res.status(500).json({ error: "Failed to fetch auction stats" });
+  }
+});
+
+// === Get Bidder-Specific Line Items with Ranks ===
+app.get("/events/:id/bidder-lineitems", ensureAuthenticated, async (req, res) => {
+  try {
+    const eventId = req.params.id;
+    const userId = req.user.id;
+
+    // Only bidders can access this endpoint (managers have their own views)
+    if (req.user.role !== "bidder") {
+      return res.status(403).json({ error: "Access restricted to bidders only" });
+    }
+
+    // Get all line items assigned to this bidder in the event, with most recent bid for each
+    const itemsResult = await pool.query(`
+      SELECT li.id,
+             li.item_name AS name,
+             li.quantity,
+             li.ext_quantity,
+             b.amount AS current_bid
+      FROM line_items li
+      JOIN lots l ON li.lot_id = l.id
+      JOIN bidder_item_assignments bia
+        ON bia.line_item_id = li.id AND bia.user_id = $2
+      LEFT JOIN LATERAL (
+        SELECT amount
+        FROM bids
+        WHERE line_item_id = li.id
+          AND user_id = $2
+          AND event_id = $1
+        ORDER BY created_at DESC
+        LIMIT 1
+      ) b ON TRUE
+      WHERE l.event_id = $1
+      ORDER BY li.id ASC
+    `, [eventId, userId]);
+
+    const lineItems = itemsResult.rows;
+
+    // Calculate ranks for each line item, scoped to event and handling nulls
+    for (const item of lineItems) {
+      if (item.current_bid == null) {
+        item.rank = null;
+      } else {
+        const rankResult = await pool.query(`
+          SELECT COUNT(*) + 1 AS rank
+          FROM bids
+          WHERE line_item_id = $1
+            AND event_id = $2
+            AND amount < $3
+        `, [item.id, eventId, item.current_bid]);
+        item.rank = parseInt(rankResult.rows[0].rank, 10);
+      }
+    }
+
+    res.json(lineItems);
+  } catch (err) {
+    console.error("Error fetching bidder line items with ranks:", err);
+    res.status(500).json({ error: "Failed to fetch bidder line items" });
+  }
+});
+
+// === Get Rank for a Single Line Item (Fast Lookup) ===
+app.get("/events/:eventId/line-items/:lineItemId/rank", ensureAuthenticated, async (req, res) => {
+  try {
+    const { eventId, lineItemId } = req.params;
+    const userId = req.user.id;
+
+    // Must be a bidder
+    if (req.user.role !== "bidder") {
+      return res.status(403).json({ error: "Access restricted to bidders only" });
+    }
+
+    // Get this bidder’s latest bid for that line item
+    const bidResult = await pool.query(`
+      SELECT amount
+      FROM bids
+      WHERE event_id=$1 AND line_item_id=$2 AND user_id=$3
+      ORDER BY created_at DESC
+      LIMIT 1
+    `, [eventId, lineItemId, userId]);
+
+    if (bidResult.rows.length === 0) {
+      return res.json({ rank: null });
+    }
+
+    const currentBid = bidResult.rows[0].amount;
+
+    // Compute rank based on latest bid per user for that line item
+    const rankResult = await pool.query(`
+      SELECT COUNT(*) + 1 AS rank
+      FROM (
+        SELECT DISTINCT ON (user_id) user_id, amount
+        FROM bids
+        WHERE event_id = $1 AND line_item_id = $2
+        ORDER BY user_id, created_at DESC
+      ) AS latest_bids
+      WHERE latest_bids.amount < $3
+    `, [eventId, lineItemId, currentBid]);
+
+    res.json({ rank: parseInt(rankResult.rows[0].rank, 10) });
+  } catch (err) {
+    console.error("Error fetching line item rank:", err);
+    res.status(500).json({ error: "Failed to fetch rank" });
   }
 });

@@ -31,41 +31,26 @@
     <p><strong>Status:</strong> <span id="auction-status">Loading...</span></p>
     <hr />
 
-    <!-- Bid submission form -->
-    <section id="bid-form-section">
-      <h4>Place a Bid</h4>
-      <form id="bid-form" class="mb-3">
-        <div class="mb-3">
-          <label for="bidAmount" class="form-label">Your Bid Amount</label>
-          <input type="number" class="form-control" id="bidAmount" placeholder="Enter amount" required min="0" step="0.01" />
-        </div>
-        <button type="submit" class="btn btn-primary">Submit Bid</button>
-      </form>
-    </section>
-
-    <!-- Leaderboard -->
-    <section id="leaderboard">
-      <h4>Current Standings</h4>
+    <!-- Bidder Line Items -->
+    <section id="bidder-lineitems" class="mt-4">
+      <h4>Your Line Items</h4>
       <table class="table table-striped">
         <thead>
           <tr>
             <th>Rank</th>
-            <th>Bidder</th>
-            <th>Amount</th>
-            <th>Time</th>
+            <th>Line Item</th>
+            <th>Quantity</th>
+            <th>Extended Qty</th>
+            <th>Your Bid</th>
+            <th>Extended Bid</th>
           </tr>
         </thead>
-        <tbody id="leaderboard-body">
-          <tr><td colspan="4" class="text-center text-muted">Loading bids...</td></tr>
+        <tbody id="lineitem-body">
+          <tr><td colspan="6" class="text-center text-muted">Loading your line items...</td></tr>
         </tbody>
       </table>
-    </section>
-
-    <!-- Bid Stream -->
-    <section id="bid-stream" class="mt-4">
-      <h4>Recent Bids</h4>
-      <div id="bid-stream-list" class="border p-2 rounded bg-light">
-        <p class="text-muted">Waiting for activity...</p>
+      <div class="text-end mt-3">
+        <button id="submitAllBidsBtn" class="btn btn-primary">Submit All Bids</button>
       </div>
     </section>
   </main>
@@ -127,64 +112,100 @@
 
     // === Update leaderboard and stream ===
     function updateBidDisplay(bids) {
-      const leaderboard = document.getElementById("leaderboard-body");
-      const stream = document.getElementById("bid-stream-list");
-
-      if (!bids || bids.length === 0) {
-        leaderboard.innerHTML = '<tr><td colspan="4" class="text-center text-muted">No bids yet</td></tr>';
-        stream.innerHTML = '<p class="text-muted">Waiting for activity...</p>';
-        return;
-      }
-
-      const latestBids = {};
-      bids.forEach(b => {
-        if (!latestBids[b.user_id] || new Date(b.created_at) > new Date(latestBids[b.user_id].created_at)) {
-          latestBids[b.user_id] = b;
-        }
-      });
-
-      const ranked = Object.values(latestBids).sort((a, b) => a.amount - b.amount);
-
-      leaderboard.innerHTML = ranked.map((b, i) => `
-        <tr>
-          <td>${i + 1}</td>
-          <td>${b.user_name || "Bidder " + b.user_id}</td>
-          <td>$${b.amount.toLocaleString()}</td>
-          <td>${new Date(b.created_at).toLocaleTimeString()}</td>
-        </tr>
-      `).join('');
-
-      stream.innerHTML = bids
-        .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
-        .map(b => `
-          <div class="bid-entry">
-            <span><strong>#${b.id}</strong> ${b.user_name || "Bidder " + b.user_id}</span>
-            <span>→ $${b.amount.toLocaleString()}</span>
-            <small class="text-muted float-end">${new Date(b.created_at).toLocaleTimeString()}</small>
-          </div>
-        `)
-        .join('');
+      // This function may remain but no leaderboard or stream update since removed from DOM
     }
 
-    // === Submit bid ===
-    document.getElementById("bid-form").addEventListener("submit", async (e) => {
-      e.preventDefault();
-      const amount = parseFloat(document.getElementById("bidAmount").value);
-      if (!amount || isNaN(amount)) return alert("Please enter a valid amount.");
-
+    // === Load bidder's line items ===
+    async function loadBidderLineItems() {
       try {
-        const res = await authFetch(`/events/${eventId}/bids`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ amount })
-        });
-        if (res.ok) {
-          document.getElementById("bidAmount").value = "";
-        } else {
-          alert("Failed to submit bid.");
+        const res = await authFetch(`/events/${eventId}/bidder-lineitems`);
+        const items = await res.json();
+        const tbody = document.getElementById("lineitem-body");
+
+        if (!items || items.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">No line items assigned.</td></tr>';
+          return;
         }
+
+        tbody.innerHTML = items.map(item => `
+          <tr data-lineitem="${item.id}">
+            <td>${item.rank || "-"}</td>
+            <td>${item.name}</td>
+            <td>${item.quantity}</td>
+            <td>${item.ext_quantity}</td>
+            <td>
+              <input type="number" class="form-control form-control-sm bid-input" 
+                id="bid-${item.id}" min="0" step="0.01" placeholder="Enter bid" 
+                value="${item.current_bid || ''}">
+            </td>
+            <td id="extended-${item.id}">${item.current_bid && item.ext_quantity ? 
+                (item.current_bid * item.ext_quantity).toFixed(2) : '-'}</td>
+          </tr>
+        `).join('');
+
+        // Add event listeners for real-time extended bid calc and submission
+        document.querySelectorAll('.bid-input').forEach(input => {
+          input.addEventListener('input', e => {
+            const id = e.target.id.split('-')[1];
+            const row = items.find(i => i.id == id);
+            const val = parseFloat(e.target.value);
+            const extendedCell = document.getElementById(`extended-${id}`);
+            extendedCell.textContent = !isNaN(val) ? (val * row.ext_quantity).toFixed(2) : '-';
+          });
+
+          input.addEventListener('change', async e => {
+            const id = e.target.id.split('-')[1];
+            const val = parseFloat(e.target.value);
+            if (!val || isNaN(val)) return;
+            try {
+              const res = await authFetch(`/events/${eventId}/bids`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ amount: val, line_item_id: id })
+              });
+              if (!res.ok) console.error("Failed to submit bid:", res.statusText);
+            } catch (err) {
+              console.error("Error submitting bid:", err);
+            }
+          });
+        });
       } catch (err) {
-        console.error("Error submitting bid:", err);
+        console.error("Error loading bidder line items:", err);
+      }
+    }
+
+
+    // === Submit all bids at once ===
+    document.addEventListener("click", async (e) => {
+      if (e.target && e.target.id === "submitAllBidsBtn") {
+        const inputs = document.querySelectorAll(".bid-input");
+        const bidPayload = [];
+        inputs.forEach(input => {
+          const lineItemId = input.id.split("-")[1];
+          const val = parseFloat(input.value);
+          if (!isNaN(val) && val > 0) {
+            bidPayload.push({ line_item_id: lineItemId, amount: val });
+          }
+        });
+        if (bidPayload.length === 0) {
+          alert("Please enter at least one valid bid before submitting.");
+          return;
+        }
+
+        try {
+          const res = await authFetch(`/events/${eventId}/bids/bulk`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ bids: bidPayload })
+          });
+          if (res.ok) {
+            alert("Bids submitted successfully!");
+          } else {
+            alert("Failed to submit bids.");
+          }
+        } catch (err) {
+          console.error("Error submitting multiple bids:", err);
+        }
       }
     });
 
@@ -194,7 +215,21 @@
       socket.emit("join_event", eventId);
 
       socket.on("bid_update", (bid) => {
-        loadBids();
+        const currentUser = JSON.parse(localStorage.getItem("user"));
+        const input = document.getElementById(`bid-${bid.line_item_id}`);
+        const extendedCell = document.getElementById(`extended-${bid.line_item_id}`);
+
+        if (input && extendedCell) {
+          // If this bidder made the bid, update their bid instantly
+          if (currentUser && bid.user_id === currentUser.id) {
+            input.value = bid.amount;
+            const row = input.closest("tr");
+            const extQty = parseFloat(row.children[3].textContent);
+            extendedCell.textContent = !isNaN(extQty) ? (bid.amount * extQty).toFixed(2) : "-";
+          }
+          // Update the rank for that line item
+          refreshLineItemRank(bid.line_item_id);
+        }
       });
 
       socket.on("auction_paused", () => {
@@ -206,6 +241,20 @@
         document.getElementById("auction-status").textContent = "Active";
         alert("Auction resumed.");
       });
+    }
+
+    // === Refresh rank for a line item dynamically (using fast endpoint) ===
+    async function refreshLineItemRank(lineItemId) {
+      try {
+        const res = await authFetch(`/events/${eventId}/line-items/${lineItemId}/rank`);
+        const data = await res.json();
+        if (data && data.rank !== null) {
+          const row = document.querySelector(`tr[data-lineitem="${lineItemId}"]`);
+          if (row) row.cells[0].textContent = data.rank;
+        }
+      } catch (err) {
+        console.error("Error updating rank:", err);
+      }
     }
 
     // === Init ===
@@ -220,6 +269,7 @@
 
       await loadAuctionStats();
       await loadBids();
+      await loadBidderLineItems();
       connectSocket();
 
       const logoutBtn = document.getElementById("logoutBtn");
