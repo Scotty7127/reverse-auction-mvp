@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Live Bidding - Tendersmith</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+  <script src="/config.js"></script>
+  <script src="/auth.js"></script>
+  
+  <script src="/socket.io/socket.io.js"></script>
+</head>
+<body>
+  <!-- Navbar -->
+  <nav class="navbar">
+    <div class="nav-container">
+      <a href="bidder.html" class="brand">Tendersmith</a>
+      <ul class="nav-links">
+        <li><a href="bidder.html">My Auctions</a></li>
+        <li><a href="bidderaccount.html">Account</a></li>
+        <li><a href="#" id="logoutBtn">Logout</a></li>
+      </ul>
+    </div>
+  </nav>
+
+  <main class="content container mt-4">
+    <h2 id="event-title">Auction</h2>
+    <p><strong>Starts:</strong> <span id="auction-start-time">Loading...</span></p>
+    <p><strong>Time left:</strong> <span id="auction-countdown">00:00:00</span></p>
+    <p><strong>Status:</strong> <span id="auction-status">Loading...</span></p>
+    <hr />
+
+    <!-- Bid submission form -->
+    <section id="bid-form-section">
+      <h4>Place a Bid</h4>
+      <form id="bid-form" class="mb-3">
+        <div class="mb-3">
+          <label for="bidAmount" class="form-label">Your Bid Amount</label>
+          <input type="number" class="form-control" id="bidAmount" placeholder="Enter amount" required min="0" step="0.01" />
+        </div>
+        <button type="submit" class="btn btn-primary">Submit Bid</button>
+      </form>
+    </section>
+
+    <!-- Leaderboard -->
+    <section id="leaderboard">
+      <h4>Current Standings</h4>
+      <table class="table table-striped">
+        <thead>
+          <tr>
+            <th>Rank</th>
+            <th>Bidder</th>
+            <th>Amount</th>
+            <th>Time</th>
+          </tr>
+        </thead>
+        <tbody id="leaderboard-body">
+          <tr><td colspan="4" class="text-center text-muted">Loading bids...</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- Bid Stream -->
+    <section id="bid-stream" class="mt-4">
+      <h4>Recent Bids</h4>
+      <div id="bid-stream-list" class="border p-2 rounded bg-light">
+        <p class="text-muted">Waiting for activity...</p>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    let eventId;
+    let socket;
+    let auctionEndTime = null;
+    let countdownInterval = null;
+
+    // === Countdown Timer ===
+    function startCountdown(endTime) {
+      clearInterval(countdownInterval);
+      countdownInterval = setInterval(() => {
+        const now = new Date();
+        const diff = endTime - now;
+        if (diff <= 0) {
+          document.getElementById("auction-countdown").textContent = "00:00:00";
+          clearInterval(countdownInterval);
+          return;
+        }
+        const hours = Math.floor(diff / 1000 / 60 / 60);
+        const minutes = Math.floor((diff / 1000 / 60) % 60);
+        const seconds = Math.floor((diff / 1000) % 60);
+        document.getElementById("auction-countdown").textContent =
+          `${String(hours).padStart(2,'0')}:${String(minutes).padStart(2,'0')}:${String(seconds).padStart(2,'0')}`;
+      }, 1000);
+    }
+
+    // === Load auction info ===
+    async function loadAuctionStats() {
+      try {
+        const res = await authFetch(`/events/${eventId}/stats`);
+        const stats = await res.json();
+        const startTime = stats.auction_time ? new Date(stats.auction_time) : null;
+
+        document.getElementById("auction-start-time").textContent = startTime ? startTime.toLocaleString() : "Not set";
+        document.getElementById("auction-status").textContent = stats.type === "paused" ? "Paused" : "Active";
+
+        if (startTime) {
+          auctionEndTime = new Date(startTime.getTime() + 60 * 60 * 1000);
+          startCountdown(auctionEndTime);
+        }
+      } catch (err) {
+        console.error("Error loading auction stats:", err);
+      }
+    }
+
+    // === Load existing bids ===
+    async function loadBids() {
+      try {
+        const res = await authFetch(`/events/${eventId}/bids`);
+        const bids = await res.json();
+        updateBidDisplay(bids);
+      } catch (err) {
+        console.error("Error loading bids:", err);
+      }
+    }
+
+    // === Update leaderboard and stream ===
+    function updateBidDisplay(bids) {
+      const leaderboard = document.getElementById("leaderboard-body");
+      const stream = document.getElementById("bid-stream-list");
+
+      if (!bids || bids.length === 0) {
+        leaderboard.innerHTML = '<tr><td colspan="4" class="text-center text-muted">No bids yet</td></tr>';
+        stream.innerHTML = '<p class="text-muted">Waiting for activity...</p>';
+        return;
+      }
+
+      const latestBids = {};
+      bids.forEach(b => {
+        if (!latestBids[b.user_id] || new Date(b.created_at) > new Date(latestBids[b.user_id].created_at)) {
+          latestBids[b.user_id] = b;
+        }
+      });
+
+      const ranked = Object.values(latestBids).sort((a, b) => a.amount - b.amount);
+
+      leaderboard.innerHTML = ranked.map((b, i) => `
+        <tr>
+          <td>${i + 1}</td>
+          <td>${b.user_name || "Bidder " + b.user_id}</td>
+          <td>$${b.amount.toLocaleString()}</td>
+          <td>${new Date(b.created_at).toLocaleTimeString()}</td>
+        </tr>
+      `).join('');
+
+      stream.innerHTML = bids
+        .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+        .map(b => `
+          <div class="bid-entry">
+            <span><strong>#${b.id}</strong> ${b.user_name || "Bidder " + b.user_id}</span>
+            <span>→ $${b.amount.toLocaleString()}</span>
+            <small class="text-muted float-end">${new Date(b.created_at).toLocaleTimeString()}</small>
+          </div>
+        `)
+        .join('');
+    }
+
+    // === Submit bid ===
+    document.getElementById("bid-form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const amount = parseFloat(document.getElementById("bidAmount").value);
+      if (!amount || isNaN(amount)) return alert("Please enter a valid amount.");
+
+      try {
+        const res = await authFetch(`/events/${eventId}/bids`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ amount })
+        });
+        if (res.ok) {
+          document.getElementById("bidAmount").value = "";
+        } else {
+          alert("Failed to submit bid.");
+        }
+      } catch (err) {
+        console.error("Error submitting bid:", err);
+      }
+    });
+
+    // === Connect socket ===
+    function connectSocket() {
+      socket = io();
+      socket.emit("join_event", eventId);
+
+      socket.on("bid_update", (bid) => {
+        loadBids();
+      });
+
+      socket.on("auction_paused", () => {
+        document.getElementById("auction-status").textContent = "Paused";
+        alert("Auction paused by manager.");
+      });
+
+      socket.on("auction_resumed", () => {
+        document.getElementById("auction-status").textContent = "Active";
+        alert("Auction resumed.");
+      });
+    }
+
+    // === Init ===
+    document.addEventListener("DOMContentLoaded", async () => {
+      const params = new URLSearchParams(window.location.search);
+      eventId = params.get("id");
+      if (!eventId) {
+        alert("No event selected.");
+        window.location.href = "bidder.html";
+        return;
+      }
+
+      await loadAuctionStats();
+      await loadBids();
+      connectSocket();
+
+      const logoutBtn = document.getElementById("logoutBtn");
+      if (logoutBtn) {
+        logoutBtn.addEventListener("click", () => {
+          localStorage.removeItem("token");
+          window.location.href = "/start.html";
+        });
+      }
+    });
+  </script>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

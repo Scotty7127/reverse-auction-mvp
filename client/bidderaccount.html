@@ -10,8 +10,9 @@
     // Only bidders can access this page
     window.requiredRoles = ["bidder"];
   </script>
-  <script src="/auth.js"></script>
   <script src="/config.js"></script>
+  <script src="/auth.js"></script>
+  
 </head>
 <body>
   <!-- Navbar -->
@@ -39,7 +40,7 @@
   <script>
     document.addEventListener("DOMContentLoaded", async () => {
       try {
-        const res = await authFetch(`${API_BASE_URL}/users/me`);
+        const res = await authFetch(`/users/me`);
         if (!res.ok) {
           throw new Error("Unable to fetch user info");
         }
