@@ -199,6 +199,7 @@
   <p><strong>Organisation:</strong> ${event.organisation_name || '-'}</p>
   <p><strong>Category:</strong> ${event.category_name || '-'}</p>
   <p><strong>Currency:</strong> ${event.currency || '-'}</p>
+  <p><strong>Status:</strong> ${event.type === 'sealed' ? 'Event Sealed (Invite Only & Anonymous Bids)' : 'Event Open (Public Bidding)'}</p>
   <p><strong>Auction Start:</strong> ${
     event.auction_time
       ? new Date(event.auction_time).toLocaleString(undefined, {

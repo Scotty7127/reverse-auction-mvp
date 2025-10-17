@@ -65,6 +65,7 @@
           div.innerHTML = `
             <h4>${evt.title}</h4>
             <p>${evt.description || ''}</p>
+            <p><strong>Status:</strong> ${evt.type === 'sealed' ? 'Event Sealed (Invite Only & Anonymous Bids)' : 'Event Open (Public Bidding)'}</p>
             <small>
               <strong>Organisation:</strong> ${evt.organisation_name || '-'} |
               <strong>Category:</strong> ${evt.category_name || '-'} |
