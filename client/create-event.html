@@ -86,6 +86,14 @@
       <label for="description">Event Description:</label>
       <textarea id="description" rows="4" placeholder="Enter a short summary..."></textarea>
 
+      <label for="sealed">
+        <input type="checkbox" id="sealed" name="sealed">
+        Sealed?
+      </label>
+      <small style="display:block; margin-top:4px; color:#555;">
+        Make this event invite only and anonymise bids.
+      </small>
+
       <button type="submit">Create Event</button>
     </form>
   </main>
@@ -161,6 +169,8 @@
         supportEl.value = event.support_contact;
         managerEl.value = event.bid_manager;
         descEl.value = event.description;
+        const sealedCheckbox = document.getElementById('sealed');
+        sealedCheckbox.checked = event.type === 'sealed';
         auctionDateEl.value = event.auction_time ? new Date(event.auction_time).toISOString().split('T')[0] : '';
         auctionTimeEl.value = event.auction_time ? new Date(event.auction_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false }) : '';
       } catch (err) {
@@ -195,7 +205,8 @@
         support_contact: supportEl.value,
         bid_manager: managerEl.value,
         description: descEl.value,
-        auction_time
+        auction_time,
+        type: document.getElementById('sealed').checked ? 'sealed' : 'open'
       };
 
       const method = eventId ? 'PUT' : 'POST';

@@ -198,6 +198,8 @@ async function runMigrations() {
     await pool.query(`ALTER TABLE events ADD COLUMN IF NOT EXISTS category_id INTEGER REFERENCES categories(id) ON DELETE CASCADE;`);
     await pool.query(`ALTER TABLE events DROP COLUMN IF EXISTS organisation;`);
     await pool.query(`ALTER TABLE lots DROP COLUMN IF EXISTS auction_time;`);
+    await pool.query(`ALTER TABLE events ADD COLUMN IF NOT EXISTS type VARCHAR(10) DEFAULT 'open';`);
+    await pool.query(`ALTER TABLE events ADD COLUMN IF NOT EXISTS reveal_bidders BOOLEAN DEFAULT FALSE;`);
 
     // Ensure messages table exists
     await pool.query(`
@@ -518,13 +520,13 @@ io.on("connection", (socket) => {
 // Create new event (store created_by as authenticated user)
 app.post("/events", ensureAuthenticated, async (req, res) => {
   try {
-    const { title, description, organisation_id, category_id, currency, support_contact, bid_manager, auction_time } = req.body;
+    const { title, description, organisation_id, category_id, currency, support_contact, bid_manager, auction_time, type } = req.body;
     const created_by = req.user.id;
     const result = await pool.query(
-      `INSERT INTO events (title, description, organisation_id, category_id, currency, support_contact, bid_manager, created_by, auction_time)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+      `INSERT INTO events (title, description, organisation_id, category_id, currency, support_contact, bid_manager, created_by, auction_time, type)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
        RETURNING *`,
-      [title, description, organisation_id, category_id, currency, support_contact, bid_manager, created_by, auction_time]
+      [title, description, organisation_id, category_id, currency, support_contact, bid_manager, created_by, auction_time, type || 'open']
     );
     res.json(result.rows[0]);
   } catch (err) {
@@ -577,13 +579,13 @@ app.get("/events/:id", async (req, res) => {
 // Update an event by ID
 app.put("/events/:id", async (req, res) => {
   try {
-    const { title, description, organisation_id, category_id, currency, support_contact, bid_manager, auction_time } = req.body;
+    const { title, description, organisation_id, category_id, currency, support_contact, bid_manager, auction_time, type } = req.body;
     const result = await pool.query(
       `UPDATE events
-       SET title=$1, description=$2, organisation_id=$3, category_id=$4, currency=$5, support_contact=$6, bid_manager=$7, auction_time=$8
-       WHERE id=$9
+       SET title=$1, description=$2, organisation_id=$3, category_id=$4, currency=$5, support_contact=$6, bid_manager=$7, auction_time=$8, type=$9
+       WHERE id=$10
        RETURNING *`,
-      [title, description, organisation_id, category_id, currency, support_contact, bid_manager, auction_time, req.params.id]
+      [title, description, organisation_id, category_id, currency, support_contact, bid_manager, auction_time, type || 'open', req.params.id]
     );
     if (result.rows.length === 0) {
       return res.status(404).json({ error: "Event not found" });
@@ -1633,3 +1635,61 @@ setInterval(async () => {
     console.error("RFQ publish scheduler error:", err);
   }
 }, 60000);
+
+
+// === Sealed Event Bidder Reveal and Masking Support ===
+
+// === Reveal Bidders (Manager Only) ===
+app.post("/events/:id/reveal-bidders", ensureAuthenticated, async (req, res) => {
+  try {
+    if (req.user.role !== "manager") {
+      return res.status(403).json({ error: "Not authorized" });
+    }
+    await pool.query("UPDATE events SET reveal_bidders = TRUE WHERE id=$1", [req.params.id]);
+    res.json({ success: true, message: "Bidders revealed for this event." });
+  } catch (err) {
+    console.error("Error revealing bidders:", err);
+    res.status(500).json({ error: "Failed to reveal bidders" });
+  }
+});
+
+// === Get Bids for Event with Masking Support ===
+app.get("/events/:id/bids", ensureAuthenticated, async (req, res) => {
+  try {
+    const eventId = req.params.id;
+    const eventResult = await pool.query("SELECT type, reveal_bidders FROM events WHERE id=$1", [eventId]);
+    if (eventResult.rows.length === 0) return res.status(404).json({ error: "Event not found" });
+    const event = eventResult.rows[0];
+
+    const bidsResult = await pool.query(`
+      SELECT b.id, b.amount, b.user_id AS bidder_id, u.first_name, u.last_name, u.email
+      FROM bids b
+      JOIN users u ON b.user_id = u.id
+      WHERE b.event_id = $1
+      ORDER BY b.amount ASC
+    `, [eventId]);
+    const bids = bidsResult.rows;
+
+    // If sealed and not revealed, mask bidder identities for non-managers
+    if (event.type === "sealed" && !event.reveal_bidders && req.user.role !== "manager") {
+      const nameMap = {};
+      let counter = 0;
+      for (const b of bids) {
+        if (!nameMap[b.bidder_id]) {
+          nameMap[b.bidder_id] = `Company ${String.fromCharCode(65 + counter++)}`;
+        }
+        b.display_name = nameMap[b.bidder_id];
+      }
+    } else {
+      // Use real names for managers or open events
+      for (const b of bids) {
+        b.display_name = `${b.first_name || ""} ${b.last_name || ""}`.trim() || b.email;
+      }
+    }
+
+    res.json(bids);
+  } catch (err) {
+    console.error("Error fetching bids:", err);
+    res.status(500).json({ error: "Failed to fetch bids" });
+  }
+});
