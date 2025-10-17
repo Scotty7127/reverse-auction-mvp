@@ -38,6 +38,27 @@
       <h1>Manager Dashboard</h1>
       <h2 id="welcome">Welcome!</h2>
       <p>This is your manager dashboard.</p>
+
+      <div class="dashboard-grid">
+        <!-- Upcoming Events -->
+        <div class="upcoming-events card shadow-sm">
+          <div class="card-body">
+            <h3 class="section-title">Your Upcoming Events</h3>
+            <div id="upcoming-events">
+              <p class="text-muted small">Loading your events...</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Quick Actions -->
+        <div class="quick-actions card shadow-sm">
+          <div class="card-body">
+            <h4 class="section-title">Quick Actions</h4>
+            <button class="btn btn-primary btn-sm w-100 mb-2" onclick="window.location.href='create-event.html'">Create Event</button>
+            <button class="btn btn-secondary btn-sm w-100" onclick="window.location.href='account.html'">Invite User</button>
+          </div>
+        </div>
+      </div>
     </section>
   </main>
 
@@ -52,11 +73,44 @@
   <script src="/socket.io/socket.io.js"></script>
   <!-- Enable messaging script -->
   <script src="/messages.js"></script>
+</script>
   <script>
     const user = JSON.parse(localStorage.getItem("user"));
     if (user && (user.first_name || user.last_name)) {
       document.getElementById("welcome").textContent = `Welcome, ${user.first_name || ""} ${user.last_name || ""}`.trim() + "!";
     }
+  </script>
+  <script>
+    async function loadUpcomingEvents() {
+      try {
+        const res = await authFetch('/events');
+        const events = await res.json();
+        const user = JSON.parse(localStorage.getItem("user"));
+        const container = document.getElementById('upcoming-events');
+
+        const relevantEvents = events.filter(evt =>
+          evt.created_by === user.id ||
+          (evt.members && evt.members.some(m => m.user_id === user.id))
+        );
+
+        if (relevantEvents.length === 0) {
+          container.innerHTML = '<p class="text-muted">No upcoming events found.</p>';
+          return;
+        }
+
+        container.innerHTML = relevantEvents.map(evt => `
+          <div class="event-mini-item" onclick="window.location.href='event.html?id=${evt.id}'">
+            <p class="event-mini-title">${evt.title}</p>
+            <p class="event-mini-time">${evt.auction_time ? new Date(evt.auction_time).toLocaleString() : 'TBA'}</p>
+          </div>
+        `).join('');
+      } catch (err) {
+        console.error('Failed to load events:', err);
+        document.getElementById('upcoming-events').innerHTML = '<p class="text-danger">Failed to load events.</p>';
+      }
+    }
+
+    loadUpcomingEvents();
   </script>
 </body>
 </html>

@@ -322,3 +322,133 @@ footer {
   border-bottom: 2px solid #e2e8f0;
   padding-bottom: 6px;
 }
+
+/* === Manager Dashboard Sleek Layout === */
+/* === Manager Dashboard Sleek Layout === */
+.dashboard-grid {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 24px;
+  margin-top: 30px;
+  flex-wrap: nowrap;
+}
+
+.upcoming-events {
+  flex: 1 1 72%;
+}
+
+.quick-actions {
+  flex: 0 0 26%;
+  max-width: 320px;
+  align-self: flex-start;
+}
+
+.upcoming-events, .quick-actions {
+  border-radius: 8px;
+  background: #fff;
+}
+
+/* Updated event-mini-item to be clickable */
+.event-mini-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid #e5e7eb;
+  padding: 8px 0;
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.event-mini-item:hover {
+  background-color: #f1f5f9;
+}
+
+.quick-actions {
+  padding: 12px 14px;
+  max-width: 260px;
+  justify-self: end;
+}
+
+.section-title {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: #1e293b;
+  margin-bottom: 10px;
+}
+
+/* Compact upcoming event items */
+.event-mini-title {
+  font-weight: 500;
+  color: #0f172a;
+  margin: 0;
+}
+
+.event-mini-time {
+  color: #0d6efd;
+  font-weight: 600;
+  margin: 0;
+  font-size: 0.85rem;
+}
+
+/* Quick Actions */
+.quick-actions .btn {
+  font-size: 0.85rem;
+  padding: 6px 0;
+  border-radius: 4px;
+}
+
+.quick-actions .section-title {
+  font-size: 1rem;
+  margin-bottom: 8px;
+  text-align: center;
+  color: #1e293b;
+}
+
+@media (max-width: 768px) {
+  .dashboard-grid {
+    flex-direction: column;
+  }
+
+  .upcoming-events,
+  .quick-actions {
+    flex: 1 1 100%;
+    max-width: 100%;
+  }
+}
+/* === FIX: Dashboard layout alignment override === */
+.dashboard-grid {
+  display: flex !important;
+  flex-direction: row !important;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 24px;
+  margin-top: 30px;
+  width: 100%;
+}
+
+.upcoming-events {
+  flex: 1 1 70%;
+  width: 70%;
+  display: block;
+}
+
+.quick-actions {
+  flex: 0 0 28%;
+  width: 28%;
+  max-width: 320px;
+  display: block;
+  align-self: flex-start;
+}
+
+@media (max-width: 768px) {
+  .dashboard-grid {
+    flex-direction: column !important;
+  }
+
+  .upcoming-events,
+  .quick-actions {
+    width: 100% !important;
+  }
+}
