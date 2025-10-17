@@ -11,6 +11,7 @@
     window.requiredRoles = ["bidder"];
   </script>
   <script src="/auth.js"></script>
+  <script src="/config.js"></script>
 </head>
 <body>
   <!-- Navbar -->
@@ -38,7 +39,7 @@
   <script>
     document.addEventListener("DOMContentLoaded", async () => {
       try {
-        const res = await authFetch("http://localhost:4000/users/me");
+        const res = await authFetch(`${API_BASE_URL}/users/me`);
         if (!res.ok) {
           throw new Error("Unable to fetch user info");
         }
