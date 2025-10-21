@@ -55,6 +55,9 @@
   </nav>
 
   <main>
+    <header>
+      <h1>Create New Event</h1>
+    </header>
     <form id="create-event-form">
       <label for="event-name">Event Name:</label>
       <input type="text" id="event-name" required>
@@ -88,6 +91,15 @@
       <label for="auction-time">Auction Start Time:</label>
       <input type="time" id="auction-time" required>
 
+      <label for="auction-duration">Auction Duration (minutes):</label>
+      <input type="number" id="auction-duration" placeholder="e.g. 30" min="1" required>
+
+      <label for="extension-time">Extension Time (seconds):</label>
+      <input type="number" id="extension-time" placeholder="e.g. 120" min="1" required>
+
+      <label for="extension-threshold">Extension Trigger Threshold (seconds):</label>
+      <input type="number" id="extension-threshold" placeholder="e.g. 60" min="1" required>
+
       <label for="description">Event Description:</label>
       <textarea id="description" rows="4" placeholder="Enter a short summary..."></textarea>
 
@@ -114,7 +126,7 @@
     const supportEl = document.getElementById('support-contact');
     const managerEl = document.getElementById('bid-manager');
     const descEl = document.getElementById('description');
-    const header = document.querySelector('header h1');
+    const header = document.querySelector('header h1') || { textContent: '' };
     const submitBtn = form.querySelector('button');
     const auctionDateEl = document.getElementById('auction-date');
     const auctionTimeEl = document.getElementById('auction-time');
@@ -178,6 +190,16 @@
         sealedCheckbox.checked = event.type === 'sealed';
         auctionDateEl.value = event.auction_time ? new Date(event.auction_time).toISOString().split('T')[0] : '';
         auctionTimeEl.value = event.auction_time ? new Date(event.auction_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false }) : '';
+        // Populate auction duration and extension fields if present
+        if (typeof event.auction_duration !== "undefined" && event.auction_duration !== null) {
+          document.getElementById('auction-duration').value = event.auction_duration;
+        }
+        if (typeof event.extension_time !== "undefined" && event.extension_time !== null) {
+          document.getElementById('extension-time').value = event.extension_time;
+        }
+        if (typeof event.extension_threshold !== "undefined" && event.extension_threshold !== null) {
+          document.getElementById('extension-threshold').value = event.extension_threshold;
+        }
       } catch (err) {
         alert('Error loading event details: ' + err.message);
       }
@@ -209,6 +231,9 @@
         currency: currencyEl.value,
         support_contact: supportEl.value,
         bid_manager: managerEl.value,
+        auction_duration: Number(document.getElementById('auction-duration').value),
+        extension_time: Number(document.getElementById('extension-time').value),
+        extension_threshold: Number(document.getElementById('extension-threshold').value),
         description: descEl.value,
         auction_time,
         type: document.getElementById('sealed').checked ? 'sealed' : 'open'

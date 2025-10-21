@@ -211,10 +211,10 @@
 
     // === Connect socket ===
     function connectSocket() {
-      socket = io();
-      socket.emit("join_event", eventId);
+      const auctionSocket = io(window.location.origin, { transports: ["websocket"] });
+      auctionSocket.emit("join_event", eventId);
 
-      socket.on("bid_update", (bid) => {
+      auctionSocket.on("bid_update", (bid) => {
         const currentUser = JSON.parse(localStorage.getItem("user"));
         const input = document.getElementById(`bid-${bid.line_item_id}`);
         const extendedCell = document.getElementById(`extended-${bid.line_item_id}`);
@@ -232,12 +232,12 @@
         }
       });
 
-      socket.on("auction_paused", () => {
+      auctionSocket.on("auction_paused", () => {
         document.getElementById("auction-status").textContent = "Paused";
         alert("Auction paused by manager.");
       });
 
-      socket.on("auction_resumed", () => {
+      auctionSocket.on("auction_resumed", () => {
         document.getElementById("auction-status").textContent = "Active";
         alert("Auction resumed.");
       });

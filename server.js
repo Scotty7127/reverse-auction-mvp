@@ -200,6 +200,12 @@ async function runMigrations() {
     await pool.query(`ALTER TABLE lots DROP COLUMN IF EXISTS auction_time;`);
     await pool.query(`ALTER TABLE events ADD COLUMN IF NOT EXISTS type VARCHAR(10) DEFAULT 'open';`);
     await pool.query(`ALTER TABLE events ADD COLUMN IF NOT EXISTS reveal_bidders BOOLEAN DEFAULT FALSE;`);
+    await pool.query(`ALTER TABLE events ADD COLUMN IF NOT EXISTS auction_duration INTERVAL DEFAULT '30 minutes';`);
+    await pool.query(`ALTER TABLE events ADD COLUMN IF NOT EXISTS extension_time INTERVAL DEFAULT '120 seconds';`);
+    await pool.query(`ALTER TABLE events ADD COLUMN IF NOT EXISTS extension_threshold INTERVAL DEFAULT '60 seconds';`);
+    await pool.query(`ALTER TABLE events ADD COLUMN IF NOT EXISTS auction_start_time TIMESTAMP;`);
+    await pool.query(`ALTER TABLE events ADD COLUMN IF NOT EXISTS auction_end_time TIMESTAMP;`);
+    await pool.query(`ALTER TABLE events ADD COLUMN IF NOT EXISTS is_paused BOOLEAN DEFAULT false;`);
 
     // Ensure messages table exists
     await pool.query(`
@@ -634,16 +640,44 @@ app.patch("/events/:id/resume", ensureAuthenticated, async (req, res) => {
 
 // ---- Events Management ----
 
+// Helper to normalize interval fields (returns interval string for Postgres)
+function normalizeInterval(value, unit) {
+  if (value === null || typeof value === "undefined" || value === "") return null;
+  let num = Number(value);
+  if (isNaN(num) || num <= 0) return null;
+  // Round to integer seconds/minutes for safety
+  num = Math.round(num);
+  return `${num} ${unit}`;
+}
+
 // Create new event (store created_by as authenticated user)
 app.post("/events", ensureAuthenticated, async (req, res) => {
   try {
-    const { title, description, organisation_id, category_id, currency, support_contact, bid_manager, auction_time, type } = req.body;
+    const { title, description, organisation_id, category_id, currency, support_contact, bid_manager, auction_time, type, auction_duration, extension_time, extension_threshold } = req.body;
     const created_by = req.user.id;
+    // Use normalizeInterval helper for interval fields
+    const auctionDurationInterval = normalizeInterval(auction_duration, "minutes");
+    const extensionTimeInterval = normalizeInterval(extension_time, "seconds");
+    const extensionThresholdInterval = normalizeInterval(extension_threshold, "seconds");
     const result = await pool.query(
-      `INSERT INTO events (title, description, organisation_id, category_id, currency, support_contact, bid_manager, created_by, auction_time, type)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+      `INSERT INTO events (title, description, organisation_id, category_id, currency, support_contact, bid_manager, created_by, auction_time, type, auction_duration, extension_time, extension_threshold)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
        RETURNING *`,
-      [title, description, organisation_id, category_id, currency, support_contact, bid_manager, created_by, auction_time, type || 'open']
+      [
+        title,
+        description,
+        organisation_id,
+        category_id,
+        currency,
+        support_contact,
+        bid_manager,
+        created_by,
+        auction_time,
+        type || 'open',
+        auctionDurationInterval,
+        extensionTimeInterval,
+        extensionThresholdInterval
+      ]
     );
     res.json(result.rows[0]);
   } catch (err) {
@@ -658,7 +692,10 @@ app.get("/events", ensureAuthenticated, async (req, res) => {
     const result = await pool.query(`
       SELECT e.*, 
              o.name AS organisation_name, 
-             c.name AS category_name
+             c.name AS category_name,
+             ROUND(EXTRACT(EPOCH FROM e.auction_duration) / 60)::int AS auction_duration,
+             ROUND(EXTRACT(EPOCH FROM e.extension_time))::int AS extension_time,
+             ROUND(EXTRACT(EPOCH FROM e.extension_threshold))::int AS extension_threshold
       FROM events e
       LEFT JOIN organisations o ON e.organisation_id = o.id
       LEFT JOIN categories c ON e.category_id = c.id
@@ -677,7 +714,10 @@ app.get("/events/:id", async (req, res) => {
     const result = await pool.query(`
       SELECT e.*, 
              o.name AS organisation_name, 
-             c.name AS category_name
+             c.name AS category_name,
+             ROUND(EXTRACT(EPOCH FROM e.auction_duration) / 60)::int AS auction_duration,
+             ROUND(EXTRACT(EPOCH FROM e.extension_time))::int AS extension_time,
+             ROUND(EXTRACT(EPOCH FROM e.extension_threshold))::int AS extension_threshold
       FROM events e
       LEFT JOIN organisations o ON e.organisation_id = o.id
       LEFT JOIN categories c ON e.category_id = c.id
@@ -696,13 +736,31 @@ app.get("/events/:id", async (req, res) => {
 // Update an event by ID
 app.put("/events/:id", async (req, res) => {
   try {
-    const { title, description, organisation_id, category_id, currency, support_contact, bid_manager, auction_time, type } = req.body;
+    const { title, description, organisation_id, category_id, currency, support_contact, bid_manager, auction_time, type, auction_duration, extension_time, extension_threshold } = req.body;
+    // Use normalizeInterval helper for interval fields
+    const auctionDurationInterval = normalizeInterval(auction_duration, "minutes");
+    const extensionTimeInterval = normalizeInterval(extension_time, "seconds");
+    const extensionThresholdInterval = normalizeInterval(extension_threshold, "seconds");
     const result = await pool.query(
       `UPDATE events
-       SET title=$1, description=$2, organisation_id=$3, category_id=$4, currency=$5, support_contact=$6, bid_manager=$7, auction_time=$8, type=$9
-       WHERE id=$10
+       SET title=$1, description=$2, organisation_id=$3, category_id=$4, currency=$5, support_contact=$6, bid_manager=$7, auction_time=$8, type=$9, auction_duration=$10, extension_time=$11, extension_threshold=$12
+       WHERE id=$13
        RETURNING *`,
-      [title, description, organisation_id, category_id, currency, support_contact, bid_manager, auction_time, type || 'open', req.params.id]
+      [
+        title,
+        description,
+        organisation_id,
+        category_id,
+        currency,
+        support_contact,
+        bid_manager,
+        auction_time,
+        type || 'open',
+        auctionDurationInterval,
+        extensionTimeInterval,
+        extensionThresholdInterval,
+        req.params.id
+      ]
     );
     if (result.rows.length === 0) {
       return res.status(404).json({ error: "Event not found" });
@@ -894,7 +952,7 @@ app.delete("/organisations/:id", async (req, res) => {
     }
 
     // Delete related events first (assuming events.organisation references organisations.id)
-    await pool.query("DELETE FROM events WHERE organisation = $1", [req.params.id]);
+    await pool.query("DELETE FROM events WHERE organisation_id = $1", [req.params.id]);
 
     // Delete organisation
     const result = await pool.query("DELETE FROM organisations WHERE id = $1 RETURNING *", [req.params.id]);

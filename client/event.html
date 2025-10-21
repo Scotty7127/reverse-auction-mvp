@@ -179,7 +179,6 @@
       </div>
 
       <script>
-        let socket;
         let auctionEndTime = null;
         let countdownInterval = null;
         let eventId = null;
@@ -281,22 +280,22 @@
 
         // Connect to WebSocket for live updates
         function connectSocket() {
-          socket = io();
-          socket.emit("join_event", eventId);
+          const auctionSocket = io(window.location.origin, { transports: ["websocket"] });
+          auctionSocket.emit("join_event", eventId);
 
-          socket.on("bid_update", (bid) => {
+          auctionSocket.on("bid_update", (bid) => {
             console.log("New bid received:", bid);
             loadBids();
             loadAuctionStats();
           });
 
-          socket.on("bidders_count_update", loadAuctionStats);
+          auctionSocket.on("bidders_count_update", loadAuctionStats);
 
-          socket.on("auction_paused", () => {
+          auctionSocket.on("auction_paused", () => {
             alert("⏸️ Auction has been paused by manager.");
           });
 
-          socket.on("auction_resumed", () => {
+          auctionSocket.on("auction_resumed", () => {
             alert("▶️ Auction resumed.");
           });
         }
@@ -406,6 +405,9 @@
   }</p>
   <p><strong>Support Contact:</strong> ${event.support_contact || '-'}</p>
   <p><strong>Bid Manager:</strong> ${event.bid_manager || '-'}</p>
+  <p><strong>Auction Duration:</strong> ${event.auction_duration ? event.auction_duration + ' minutes' : '-'}</p>
+  <p><strong>Extension Time:</strong> ${event.extension_time ? event.extension_time + ' seconds' : '-'}</p>
+  <p><strong>Extension Threshold:</strong> ${event.extension_threshold ? event.extension_threshold + ' seconds' : '-'}</p>
   <small>Created at: ${new Date(event.created_at).toLocaleString()}</small>
 `;
 
