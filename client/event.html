@@ -97,6 +97,7 @@
         <div id="managerList"><p>Loading...</p></div>
         <hr>
         <h4>Bidders</h4>
+        <p class="bidders-instruction text-muted">Select a supplier’s name to assign line items, weighting, and opening bids.</p>
         <div id="bidderList"><p>Loading...</p></div>
       </div>
       <button id="save-members-btn" style="margin-top: 10px; background-color:#007bff;color:white;border:none;padding:10px 15px;border-radius:5px;cursor:pointer;">💾 Save Assignments</button>
@@ -629,7 +630,7 @@
       }
     }
 
-    // Load users & current members; render separate Managers and Bidders lists
+    // Load users & current members; render separate Managers and Bidders lists (managers simplified, bidders grouped by organisation)
     async function loadUsersAndMembers(eventId) {
       try {
         const [usersRes, eventRes, membersRes] = await Promise.all([
@@ -661,8 +662,7 @@
           const row = document.createElement("div");
           row.innerHTML = `
             <div>
-              <strong>${(u.first_name || "")} ${(u.last_name || "")}${isCreator ? " (Creator)" : ""}</strong><br>
-              <small>${u.email}</small>
+              <strong>${(u.first_name || "")} ${(u.last_name || "")}${isCreator ? " (Creator)" : ""}</strong>
             </div>
             <input type="checkbox" class="manager-assign" data-user-id="${u.id}" ${checked ? "checked" : ""} ${isCreator ? "disabled" : ""}/>
           `;
@@ -675,19 +675,26 @@
         bidderList.innerHTML = "";
         const bidders = users.filter(u => u.role === "bidder");
         bidders.sort((a, b) => (a.first_name || "").localeCompare(b.first_name || ""));
+
+        // Render bidders as flat list, showing supplier organisation name as primary label
         bidders.forEach(u => {
           const checked = assignedBidderIds.has(u.id);
           const row = document.createElement("div");
+          row.className = "bidder-card";
           row.innerHTML = `
-            <div>
-              <strong>
-                <a href="assign-line-items.html?event_id=${eventId}&user_id=${u.id}">
-                  ${(u.first_name || "")} ${(u.last_name || "")}
+            <div class="bidder-header">
+              <div class="bidder-org-wrapper">
+                <a href="assign-line-items.html?event_id=${eventId}&user_id=${u.id}" class="bidder-org">
+                  ${u.organisation_name || "Unassigned Organisation"}
                 </a>
-              </strong><br>
-              <small>${u.email}</small>
+              </div>
+              <div class="checkbox-wrapper">
+                <input type="checkbox" class="bidder-assign" data-user-id="${u.id}" ${checked ? "checked" : ""} />
+              </div>
             </div>
-            <input type="checkbox" class="bidder-assign" data-user-id="${u.id}" ${checked ? "checked" : ""} />
+            <div class="bidder-info">
+              <small>${(u.first_name || "")} ${(u.last_name || "")} — ${u.email || ""}</small>
+            </div>
           `;
           bidderList.appendChild(row);
         });

@@ -16,9 +16,19 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server, { cors: { origin: "*" } });
 
+
 app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, "client")));
+
+// Disable caching for all responses (development safety)
+app.use((req, res, next) => {
+  res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+  res.setHeader("Pragma", "no-cache");
+  res.setHeader("Expires", "0");
+  res.setHeader("Surrogate-Control", "no-store");
+  next();
+});
 
 // Set up multer for file uploads
 const uploadDir = path.join(__dirname, "uploads");
@@ -523,13 +533,26 @@ app.get("/users/me", authMiddleware, async (req, res) => {
   }
 });
 
-// Get all users (protected)
+// Get all users (protected) with organisation info
 app.get("/users", ensureAuthenticated, async (req, res) => {
   try {
-    const result = await pool.query("SELECT id, first_name, last_name, email, role FROM users ORDER BY first_name ASC");
+    const result = await pool.query(`
+      SELECT 
+        u.id, 
+        u.first_name, 
+        u.last_name, 
+        u.email, 
+        u.role,
+        u.organisation_id,
+        o.name AS organisation_name,
+        o.type AS organisation_type
+      FROM users u
+      LEFT JOIN organisations o ON u.organisation_id = o.id
+      ORDER BY u.first_name ASC
+    `);
     res.json(result.rows);
   } catch (err) {
-    console.error("Error fetching users:", err);
+    console.error("Error fetching users with organisation:", err);
     res.status(500).json({ error: "Failed to fetch users" });
   }
 });
