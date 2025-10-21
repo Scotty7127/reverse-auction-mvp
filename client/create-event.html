@@ -133,10 +133,10 @@
 
     async function fetchOrganisations() {
       try {
-        const res = await authFetch('/organisations');
-        if (!res.ok) throw new Error('Failed to load organisations');
+        const res = await authFetch('/organisations?type=client');
+        if (!res.ok) throw new Error('Failed to load client organisations');
         const organisations = await res.json();
-        orgEl.innerHTML = '<option value="">Select Organisation</option>';
+        orgEl.innerHTML = '<option value=\"\">Select Client Organisation</option>';
         organisations.forEach(org => {
           const option = document.createElement('option');
           option.value = org.id;

@@ -123,6 +123,10 @@ async function runMigrations() {
         created_at TIMESTAMP DEFAULT NOW()
       );
     `);
+    await pool.query(`
+      ALTER TABLE invitations 
+      ADD COLUMN IF NOT EXISTS organisation_id INTEGER REFERENCES organisations(id) ON DELETE CASCADE;
+    `);
 
     await pool.query(`
       CREATE TABLE IF NOT EXISTS lots (
@@ -328,7 +332,7 @@ const nodemailer = require("nodemailer");
 
 // === Send Invitation ===
 app.post("/invite", async (req, res) => {
-  const { email, role } = req.body;
+  const { email, role, organisation_id } = req.body;
   if (!email) return res.status(400).json({ error: "Email is required" });
 
   try {
@@ -347,11 +351,11 @@ app.post("/invite", async (req, res) => {
 
     // Save invite in DB
     await pool.query(
-      `INSERT INTO invitations (email, role, token, expires_at)
-       VALUES ($1, $2, $3, $4)
+      `INSERT INTO invitations (email, role, token, expires_at, organisation_id)
+       VALUES ($1, $2, $3, $4, $5)
        ON CONFLICT (email)
-       DO UPDATE SET token=$3, expires_at=$4, accepted=false`,
-      [email, role || "bidder", token, expires_at]
+       DO UPDATE SET token=$3, expires_at=$4, accepted=false, organisation_id=$5`,
+      [email, role || "bidder", token, expires_at, organisation_id]
     );
 
     // Send email with invite link
@@ -428,12 +432,12 @@ app.post("/invite/accept", async (req, res) => {
     // Hash password
     const hash = await bcrypt.hash(password, 10);
 
-    // Insert user with first_name and last_name
+    // Insert user with first_name, last_name, and organisation_id
     const userInsert = await pool.query(
-      `INSERT INTO users (first_name, last_name, name, email, password_hash, role)
-       VALUES ($1, $2, $3, $4, $5, $6)
+      `INSERT INTO users (first_name, last_name, name, email, password_hash, role, organisation_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
        RETURNING id, first_name, last_name, name, email, role`,
-      [first_name, last_name, first_name + " " + last_name, email, hash, role]
+      [first_name, last_name, first_name + " " + last_name, email, hash, role, invitation.organisation_id]
     );
 
     // Mark invitation as accepted
@@ -2066,5 +2070,20 @@ app.get("/events/:eventId/line-items/:lineItemId/rank", ensureAuthenticated, asy
   } catch (err) {
     console.error("Error fetching line item rank:", err);
     res.status(500).json({ error: "Failed to fetch rank" });
+  }
+});
+// --- Get all users for an organisation ---
+app.get("/organisations/:id/users", ensureAuthenticated, async (req, res) => {
+  try {
+    const orgId = req.params.id;
+    const result = await pool.query(
+      `SELECT id, first_name, last_name, email, role 
+       FROM users WHERE organisation_id = $1 ORDER BY first_name ASC`,
+      [orgId]
+    );
+    res.json(result.rows);
+  } catch (err) {
+    console.error("Error fetching organisation users:", err);
+    res.status(500).json({ error: "Failed to fetch organisation users" });
   }
 });

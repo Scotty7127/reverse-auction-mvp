@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Organisation Details</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
   <link rel="stylesheet" href="style.css">
   <script>
     window.requiredRoles = ["manager"];
@@ -31,6 +32,7 @@
     <div class="container">
       <div class="card shadow-sm mb-3">
         <div class="card-body">
+          <button type="button" onclick="goBack()" class="btn mb-2">← Back</button>
           <h2 class="card-title" id="page-title">Add Organisation</h2>
           <form id="org-form" enctype="multipart/form-data">
             <div class="mb-3">
@@ -61,31 +63,50 @@
               <input type="file" id="org-logo" name="logo" accept="image/*">
             </div>
             <div class="actions">
-              <button type="button" onclick="goBack()" class="btn">Back</button>
               <button type="submit" class="btn btn-primary">Save</button>
             </div>
           </form>
         </div>
       </div>
-      <div class="card shadow-sm">
+      <div id="categories-section" style="display:none;">
+        <div class="card shadow-sm">
+          <div class="card-body">
+            <h2 class="section-title">Categories</h2>
+            <form id="category-form" class="mb-3">
+              <input type="text" id="category-name" name="name" placeholder="Name" required>
+              <input type="text" id="category-description" name="description" placeholder="Description" required>
+              <button type="submit" class="btn btn-primary">Add Category</button>
+            </form>
+            <table id="categories-table" class="line-items-table">
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Description</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                <!-- Categories will be populated here -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <div class="card shadow-sm" id="users-section" style="display:none;">
         <div class="card-body">
-          <h2 class="section-title">Categories</h2>
-          <form id="category-form" class="mb-3">
-            <input type="text" id="category-name" name="name" placeholder="Name" required>
-            <input type="text" id="category-description" name="description" placeholder="Description" required>
-            <button type="submit" class="btn btn-primary">Add Category</button>
-            <button type="button" id="cancel-edit" class="btn btn-danger">Cancel Edit</button>
-          </form>
-          <table id="categories-table" class="line-items-table">
+          <h2 class="section-title">Users</h2>
+          <button class="btn btn-primary mb-3" id="invite-user-btn">Invite User</button>
+          <table id="users-table" class="line-items-table">
             <thead>
               <tr>
                 <th>Name</th>
-                <th>Description</th>
-                <th>Actions</th>
+                <th>Email</th>
+                <th>Role</th>
               </tr>
             </thead>
             <tbody>
-              <!-- Categories will be populated here -->
+              <!-- Users populated here -->
             </tbody>
           </table>
         </div>
@@ -129,6 +150,20 @@
       document.getElementById("org-name").value = org.name || "";
       document.getElementById("org-currency").value = org.currency || "";
       document.getElementById("org-type").value = org.type || "client";
+
+      // Show/hide sections based on org type
+      if (org.type === 'client') {
+        document.getElementById('categories-section').style.display = 'block';
+        document.getElementById('users-section').style.display = 'none';
+        fetchCategories();
+      } else if (org.type === 'supplier') {
+        document.getElementById('categories-section').style.display = 'none';
+        document.getElementById('users-section').style.display = 'block';
+        fetchUsers();
+      } else {
+        document.getElementById('categories-section').style.display = 'none';
+        document.getElementById('users-section').style.display = 'none';
+      }
     }
 
     // Handle create or update
@@ -142,9 +177,10 @@
       const res = await authFetch(endpoint, { method, body: formData });
       if (res.ok) {
         alert("✅ Organisation saved successfully!");
-        if (!orgId) {
-          // Redirect to edit page with new org ID if just created
-          const data = await res.json();
+        const data = orgId ? { id: orgId } : await res.json();
+        // Stay on the same page for supplier orgs; otherwise redirect to list
+        const orgType = document.getElementById("org-type").value;
+        if (orgType === "supplier") {
           window.location.href = `orgdetail.html?id=${data.id}`;
         } else {
           window.location.href = "organisations.html";
@@ -163,18 +199,75 @@
       const ok = await ensureAuth();
       if (!ok) return;
       await loadOrganisation();
-      if (orgId) {
-        await fetchCategories();
-      }
+      // fetchCategories() or fetchUsers() now handled within loadOrganisation()
     })();
+    // Users management (for suppliers)
+    async function fetchUsers() {
+      if (!orgId) return;
+      const res = await authFetch(`/organisations/${orgId}/users`);
+      if (res.ok) {
+        const users = await res.json();
+        renderUsers(users);
+      } else {
+        console.error('Failed to load users');
+      }
+    }
+
+    function renderUsers(users) {
+      const tbody = document.querySelector('#users-table tbody');
+      tbody.innerHTML = '';
+      if (!users.length) {
+        tbody.innerHTML = '<tr><td colspan="3">No users found.</td></tr>';
+        return;
+      }
+      users.forEach(u => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `<td>${u.first_name || ''} ${u.last_name || ''}</td><td>${u.email}</td><td>${u.role}</td>`;
+        tbody.appendChild(tr);
+      });
+    }
+
+    const inviteBtn = document.getElementById('invite-user-btn');
+    if (inviteBtn) {
+      inviteBtn.addEventListener('click', () => {
+        const modalEl = document.getElementById('inviteUserModal');
+        if (!modalEl || !window.bootstrap) return;
+        const modal = new bootstrap.Modal(modalEl);
+        modal.show();
+      });
+    }
+
+    const inviteForm = document.getElementById('invite-user-form');
+    if (inviteForm) {
+      inviteForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const name = document.getElementById('invite-name')?.value.trim();
+        const email = document.getElementById('invite-email')?.value.trim();
+        if (!email) return alert('Enter an email address.');
+        const res = await authFetch('/invite', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, role: 'bidder', organisation_id: orgId })
+        });
+        if (res.ok) {
+          alert('✅ Invitation sent!');
+          const modalEl = document.getElementById('inviteUserModal');
+          if (modalEl && window.bootstrap) {
+            const modal = bootstrap.Modal.getInstance(modalEl);
+            if (modal) modal.hide();
+          }
+          fetchUsers();
+        } else {
+          alert('❌ Failed to send invite.');
+        }
+      });
+    }
 
     // Categories management
     const categoryForm = document.getElementById("category-form");
     const categoryNameInput = document.getElementById("category-name");
     const categoryDescriptionInput = document.getElementById("category-description");
     const categoriesTableBody = document.querySelector("#categories-table tbody");
-    const cancelEditBtn = document.getElementById("cancel-edit");
-    cancelEditBtn.style.display = "none";
 
     let editingCategoryId = null;
 
@@ -244,16 +337,7 @@
       categoryNameInput.value = category.name;
       categoryDescriptionInput.value = category.description;
       categoryForm.querySelector("button[type='submit']").textContent = "💾 Save Changes";
-      cancelEditBtn.style.display = "inline-block";
     }
-
-    cancelEditBtn.addEventListener("click", () => {
-      editingCategoryId = null;
-      categoryNameInput.value = "";
-      categoryDescriptionInput.value = "";
-      categoryForm.querySelector("button[type='submit']").textContent = "➕ Add Category";
-      cancelEditBtn.style.display = "none";
-    });
 
     categoryForm.addEventListener("submit", async (e) => {
       e.preventDefault();
@@ -310,7 +394,6 @@
           categoryNameInput.value = "";
           categoryDescriptionInput.value = "";
           categoryForm.querySelector("button[type='submit']").textContent = "➕ Add Category";
-          cancelEditBtn.style.display = "none";
           fetchCategories();
         } else {
           let msg = "❌ Failed to save category.";
@@ -346,6 +429,30 @@
       }
     }
 
-  </script>
+</script>
+
+  <div class="modal fade" id="inviteUserModal" tabindex="-1" aria-labelledby="inviteUserModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="inviteUserModalLabel">Invite New User</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <form id="invite-user-form">
+            <div class="mb-3">
+              <label for="invite-name" class="form-label">Name</label>
+              <input type="text" class="form-control" id="invite-name" required>
+            </div>
+            <div class="mb-3">
+              <label for="invite-email" class="form-label">Email</label>
+              <input type="email" class="form-control" id="invite-email" required>
+            </div>
+            <button type="submit" class="btn btn-primary">Send Invite</button>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
 </body>
 </html>
