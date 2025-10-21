@@ -1567,6 +1567,35 @@ app.get("/messages", ensureAuthenticated, async (req, res) => {
   }
 });
 
+// --- Get latest message timestamp per user ---
+app.get("/messages/latest", ensureAuthenticated, async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    const result = await pool.query(`
+      SELECT
+        CASE
+          WHEN sender_id = $1 THEN receiver_id
+          ELSE sender_id
+        END AS other_user_id,
+        MAX(created_at) AS latest_time
+      FROM messages
+      WHERE sender_id = $1 OR receiver_id = $1
+      GROUP BY other_user_id
+    `, [userId]);
+
+    const map = {};
+    for (const row of result.rows) {
+      map[row.other_user_id] = row.latest_time;
+    }
+
+    res.json(map);
+  } catch (err) {
+    console.error("❌ /messages/latest failed:", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 // Get messages between two users
 app.get("/messages/:otherUserId", ensureAuthenticated, async (req, res) => {
   try {
@@ -1608,27 +1637,57 @@ app.post("/messages", ensureAuthenticated, async (req, res) => {
   }
 });
 
-// WebSocket for messages
+// ---- Messaging: Global Socket.IO with JWT Auth, BroadcastChannel Sync ----
+const JWT_SECRET = SECRET;
 io.on("connection", (socket) => {
-  console.log("User connected for messaging:", socket.id);
+  console.log("🔌 User connected to messaging");
 
-  socket.on("join_user", (userId) => {
-    socket.join(`user_${userId}`);
-  });
+  // Authenticate user if token is provided
+  const token = socket.handshake.auth?.token;
+  if (!token) {
+    console.log("❌ Socket connection rejected: missing token");
+    socket.disconnect();
+    return;
+  }
 
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET);
+    socket.user = decoded;
+    socket.join(`user_${decoded.id}`);
+    console.log(`✅ ${decoded.email} connected to messaging`);
+  } catch (err) {
+    console.error("❌ Invalid token:", err.message);
+    socket.disconnect();
+    return;
+  }
+
+  // Handle incoming messages
   socket.on("send_message", async (msg) => {
-    const { sender_id, receiver_id, content } = msg;
-    if (!content.trim()) return;
-    const result = await pool.query(
-      `INSERT INTO messages (sender_id, receiver_id, content)
-       VALUES ($1, $2, $3) RETURNING *`,
-      [sender_id, receiver_id, content]
-    );
-    io.to(`user_${receiver_id}`).emit("receive_message", result.rows[0]);
+    try {
+      const { toUserId, content } = msg || {};
+      if (!toUserId || !content || !String(content).trim()) return;
+
+      // Save to DB
+      const insert = await pool.query(
+        `INSERT INTO messages (sender_id, receiver_id, content)
+         VALUES ($1, $2, $3)
+         RETURNING id, sender_id, receiver_id, content, created_at, read`,
+        [socket.user.id, toUserId, content.trim()]
+      );
+      const saved = insert.rows[0];
+
+      // Emit to recipient and echo to sender
+      io.to(`user_${toUserId}`).emit("receive_message", saved);
+      io.to(`user_${socket.user.id}`).emit("receive_message", saved);
+
+      console.log("💬 Message saved & emitted:", saved);
+    } catch (err) {
+      console.error("❌ send_message error:", err);
+    }
   });
 
   socket.on("disconnect", () => {
-    console.log("User disconnected from messaging:", socket.id);
+    console.log(`⚡️ ${socket.user?.email || "Unknown user"} disconnected`);
   });
 });
 

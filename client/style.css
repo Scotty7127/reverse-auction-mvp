@@ -566,3 +566,108 @@ footer {
   font-size: 0.9rem;
   color: #6c757d;
 }
+
+/* === Slide-Out Chat Panel (Global) === */
+.chat-panel { position: fixed; top: 0; right: -420px; width: 420px; height: 100%; background: #fff; border-left: 1px solid #dce3eb; box-shadow: -2px 0 10px rgba(0,0,0,0.08); transition: right 0.3s ease; display: flex; flex-direction: column; z-index: 1050; }
+.chat-panel.open { right: 0; }
+.chat-header { display: flex; justify-content: space-between; align-items: center; padding: 10px 14px; border-bottom: 1px solid #e5e7eb; background: #f8f9fa; }
+.chat-body { display: grid; grid-template-columns: auto 1fr; gap: 0; height: calc(100% - 52px); }
+.chat-sidebar {
+  border-right: 1px solid #e5e7eb;
+  display: flex;
+  flex-direction: column;
+  width: 56px;                   /* collapsed width */
+  transition: width 0.3s ease;   /* smooth expand */
+  overflow: hidden;               /* hide text when collapsed */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.chat-sidebar:hover { width: 220px; }
+
+.chat-sidebar * {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.chat-sidebar-header { padding: 8px; border-bottom: 1px solid #e5e7eb; }
+.chat-sidebar-header input { width: 100%; padding: 6px 8px; border: 1px solid #cbd5e1; border-radius: 4px; font-size: 0.9rem; }
+.chat-section-title { margin: 8px 8px 4px; font-size: 0.8rem; color: #64748b; text-transform: uppercase; letter-spacing: .03em; }
+.chat-list { list-style: none; padding: 0; margin: 0; overflow-y: auto; }
+.chat-list-item { padding: 8px 10px; border-bottom: 1px solid #f1f5f9; cursor: pointer; }
+.chat-list-item:hover { background: #f8fafc; }
+.chat-list-name { font-size: 0.95rem; color: #0f172a; font-weight: 600; }
+.chat-list-sub { font-size: 0.8rem; color: #64748b; }
+.chat-main { display: flex; flex-direction: column; height: 100%; }
+.chat-thread-header { padding: 10px 12px; border-bottom: 1px solid #e5e7eb; background: #fafafa; font-weight: 600; color: #0f172a; }
+.chat-messages { flex: 1; overflow-y: auto; padding: 10px 12px; background: #fff; }
+.chat-input { display: flex; gap: 8px; padding: 10px; border-top: 1px solid #e5e7eb; background: #fafafa; }
+.chat-input input { flex: 1; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 0.95rem; }
+.chat-input .btn { padding: 6px 12px; }
+.message { max-width: 78%; padding: 8px 12px; border-radius: 10px; word-break: break-word; margin-bottom: 8px; }
+.message.sent { align-self: flex-end; background: #d1e7dd; }
+.message.received { align-self: flex-start; background: #e2e8f0; }
+.message-meta { font-size: 0.75rem; color: #64748b; text-align: right; margin-top: 2px; }
+
+/* === Chat Sidebar Collapse/Expand Details === */
+.chat-all-heading { font-size: 1rem; font-weight: 600; margin: 6px 0; text-align: center; color: #0f172a; }
+
+/* When collapsed, hide extra text and inputs (and any hidden items under the +) */
+/* When collapsed, hide extra text and inputs (and any hidden items under the +) */
+.chat-sidebar:not(:hover) .chat-section-title,
+.chat-sidebar:not(:hover) .chat-list-sub,
+.chat-sidebar:not(:hover) #chat-search,
+.chat-sidebar:not(:hover) .chat-all-heading,
+.chat-sidebar:not(:hover) .chat-list-name,
+.chat-sidebar:not(:hover) .chat-list-item { display: none !important; }
+
+/* (Rule removed: .chat-sidebar:not(:hover) .chat-list-name { ... } - now handled above) */
+
+/* Sidebar "+" and "+ New Chat" toggle (only pseudo-elements, no real text) */
+#new-chat-header::after { content: '+'; display: block; text-align: center; font-size: 1.2rem; font-weight: 700; }
+.chat-sidebar:hover #new-chat-header::after { content: '+ New Chat'; font-size: 1rem; font-weight: 600; }
+
+/* === Chat Home (All Chats list) === */
+.chat-home { padding: 10px 14px; overflow-y: auto; }
+.chat-home.hidden { display: none; }
+.chat-home h4 { font-size: 1rem; font-weight: 600; margin-bottom: 8px; }
+#chat-home-list { list-style: none; padding: 0; margin: 0; }
+.chat-home-item {
+  padding: 8px 10px;
+  border-bottom: 1px solid #f1f5f9;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 2px;
+}
+.chat-home-item:hover { background: #f8fafc; }
+.chat-home-name {
+  font-weight: 500;
+  color: #0f172a;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  width: 100%;
+}
+.chat-home-preview {
+  font-size: 0.85rem;
+  color: #9ca3af; /* light grey */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  width: 100%;
+}
+.chat-home-meta {
+  font-size: 0.75rem;
+  color: #94a3b8;
+  align-self: flex-end;
+}
+
+/* Back button in thread header */
+.chat-back-btn { background: none; border: none; font-size: 0.9rem; cursor: pointer; color: #0d6efd; margin-right: 8px; }
+.chat-back-btn:hover { text-decoration: underline; }
+
+/* Generic hidden utility (used by thread/home toggle) */
+.hidden { display: none !important; }
