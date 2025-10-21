@@ -467,3 +467,23 @@ footer {
     width: 100% !important;
   }
 }
+/* === Organisation Detail: Categories form spacing === */
+#category-form {
+  display: flex;
+  gap: 12px;              /* space between inputs and buttons */
+  align-items: center;
+  flex-wrap: wrap;        /* wrap on small screens */
+}
+
+#category-form input[type="text"] {
+  flex: 1 1 240px;        /* grow but keep a sensible min width */
+}
+
+#category-form .btn {
+  margin-left: 0;         /* reset any inherited margins */
+}
+
+/* Make the cancel button not stick to the submit button */
+#cancel-edit.btn {
+  margin-left: 6px;
+}

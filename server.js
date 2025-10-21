@@ -60,9 +60,17 @@ async function runMigrations() {
         name TEXT NOT NULL,
         currency TEXT,
         logo_url TEXT,
+        type TEXT CHECK (type IN ('client', 'agency', 'supplier')) DEFAULT 'client',
         created_at TIMESTAMP DEFAULT NOW()
       );
     `);
+    // Ensure type column exists (migration for legacy DBs)
+    await pool.query("ALTER TABLE organisations ADD COLUMN IF NOT EXISTS type TEXT CHECK (type IN ('client', 'agency', 'supplier')) DEFAULT 'client';");
+    // Clean up legacy rows: set type to 'client' where null
+    await pool.query("UPDATE organisations SET type='client' WHERE type IS NULL");
+    // Normalize any legacy casing/whitespace and fix invalid values
+    await pool.query("UPDATE organisations SET type = LOWER(TRIM(type)) WHERE type IS NOT NULL");
+    await pool.query("UPDATE organisations SET type='client' WHERE type NOT IN ('client','agency','supplier')");
 
     await pool.query(`
       CREATE TABLE IF NOT EXISTS categories (
@@ -839,7 +847,27 @@ app.delete("/events/:eventId/members/:userId", ensureAuthenticated, async (req, 
 // Get all organisations (protected)
 app.get("/organisations", ensureAuthenticated, async (req, res) => {
   try {
-    const result = await pool.query("SELECT * FROM organisations ORDER BY created_at DESC");
+    const rawType = (req.query.type || "").toString().trim().toLowerCase();
+    const allowedTypes = ["client", "agency", "supplier"];
+
+    if (allowedTypes.includes(rawType)) {
+      const result = await pool.query(
+        "SELECT * FROM organisations WHERE type = $1 ORDER BY created_at DESC",
+        [rawType]
+      );
+      console.log('[GET /organisations] filter type =', rawType, 'rows =', result.rows.length);
+      return res.json(result.rows);
+    }
+
+    // If a type param was provided but is invalid, return empty set (do not fallback to ALL)
+    if (req.query.type !== undefined) {
+      return res.json([]);
+    }
+
+    const result = await pool.query(
+      "SELECT * FROM organisations ORDER BY created_at DESC"
+    );
+    console.log('[GET /organisations] no type filter, rows =', result.rows.length);
     res.json(result.rows);
   } catch (err) {
     console.error("Error fetching organisations:", err);
@@ -864,7 +892,12 @@ app.get("/organisations/:id", async (req, res) => {
 // Create a new organisation (with optional logo upload)
 app.post("/organisations", upload.single("logo"), async (req, res) => {
   try {
-    const { name, currency } = req.body;
+    const { name, currency, type } = req.body;
+    console.log('[POST /organisations] raw body:', req.body);
+    const rawType = (type || 'client').toString().trim().toLowerCase();
+    const allowedTypes = ['client','agency','supplier'];
+    const safeType = allowedTypes.includes(rawType) ? rawType : 'client';
+    console.log('[POST /organisations] incoming type =', type, 'normalized =', safeType);
     let logo_url = null;
     if (req.file) {
       logo_url = `/uploads/${req.file.filename}`;
@@ -873,11 +906,12 @@ app.post("/organisations", upload.single("logo"), async (req, res) => {
       return res.status(400).json({ error: "Name is required" });
     }
     const result = await pool.query(
-      `INSERT INTO organisations (name, currency, logo_url)
-       VALUES ($1, $2, $3)
+      `INSERT INTO organisations (name, currency, logo_url, type)
+       VALUES ($1, $2, $3, $4)
        RETURNING *`,
-      [name, currency || null, logo_url]
+      [name, currency || null, logo_url, safeType]
     );
+    console.log('[POST /organisations] created id', result.rows[0].id, 'type', result.rows[0].type);
     res.json(result.rows[0]);
   } catch (err) {
     console.error("Error creating organisation:", err);
@@ -888,7 +922,8 @@ app.post("/organisations", upload.single("logo"), async (req, res) => {
 // Update an organisation by ID (with optional logo upload)
 app.put("/organisations/:id", upload.single("logo"), async (req, res) => {
   try {
-    const { name, currency } = req.body;
+    const { name, currency, type } = req.body;
+    console.log('[PUT /organisations/:id] raw body:', req.body);
     let logo_url = null;
     if (req.file) {
       logo_url = `/uploads/${req.file.filename}`;
@@ -919,13 +954,19 @@ app.put("/organisations/:id", upload.single("logo"), async (req, res) => {
     const updatedName = name !== undefined ? name : existingOrg.name;
     const updatedCurrency = currency !== undefined ? currency : existingOrg.currency;
 
+    const rawType = ((type ?? existingOrg.type) ?? 'client').toString().trim().toLowerCase();
+    const allowedTypes = ['client','agency','supplier'];
+    const safeType = allowedTypes.includes(rawType) ? rawType : (existingOrg.type || 'client');
+    console.log('[PUT /organisations/:id] incoming type =', type, 'normalized =', safeType, 'for id', req.params.id);
+
     const result = await pool.query(
       `UPDATE organisations
-       SET name=$1, currency=$2, logo_url=$3
-       WHERE id=$4
+       SET name=$1, currency=$2, logo_url=$3, type=$4
+       WHERE id=$5
        RETURNING *`,
-      [updatedName, updatedCurrency, logo_url, req.params.id]
+      [updatedName, updatedCurrency, logo_url, safeType, req.params.id]
     );
+    console.log('[PUT /organisations/:id] updated id', result.rows[0].id, 'type', result.rows[0].type);
     res.json(result.rows[0]);
   } catch (err) {
     console.error("Error updating organisation:", err);
@@ -1836,12 +1877,21 @@ app.get("/events/:id/bids", ensureAuthenticated, async (req, res) => {
     if (eventResult.rows.length === 0) return res.status(404).json({ error: "Event not found" });
     const event = eventResult.rows[0];
 
+    // Use full bid data with correct field names and timestamps, sorted by newest
     const bidsResult = await pool.query(`
-      SELECT b.id, b.amount, b.user_id AS bidder_id, u.first_name, u.last_name, u.email
+      SELECT 
+        b.id, 
+        b.amount, 
+        b.created_at,
+        b.line_item_id,
+        b.user_id AS bidder_id, 
+        u.first_name, 
+        u.last_name, 
+        u.email
       FROM bids b
-      JOIN users u ON b.user_id = u.id
+      LEFT JOIN users u ON b.user_id = u.id
       WHERE b.event_id = $1
-      ORDER BY b.amount ASC
+      ORDER BY b.created_at DESC
     `, [eventId]);
     const bids = bidsResult.rows;
 

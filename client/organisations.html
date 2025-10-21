@@ -30,48 +30,66 @@
   </nav>
   <main>
     <h2>Manage Organisations</h2>
-    <div class="actions">
+    <div class="actions mb-3">
       <button onclick="window.location.href='orgdetail.html'">➕ Add Organisation</button>
     </div>
 
-    <table id="organisations-table" class="line-items-table">
-      <thead>
-        <tr>
-          <th>Organisation Name</th>
-          <th>Actions</th>
-        </tr>
-      </thead>
-      <tbody>
-        <!-- Organisations will be dynamically loaded here -->
-      </tbody>
-    </table>
+    <ul class="nav nav-tabs" id="orgTabs" role="tablist">
+      <li class="nav-item"><button class="nav-link active" id="clients-tab" data-bs-toggle="tab" data-bs-target="#clients" type="button" role="tab">Clients</button></li>
+      <li class="nav-item"><button class="nav-link" id="agencies-tab" data-bs-toggle="tab" data-bs-target="#agencies" type="button" role="tab">Agencies</button></li>
+      <li class="nav-item"><button class="nav-link" id="suppliers-tab" data-bs-toggle="tab" data-bs-target="#suppliers" type="button" role="tab">Suppliers</button></li>
+    </ul>
+    <div class="tab-content">
+      <div class="tab-pane fade show active" id="clients" role="tabpanel">
+        <table id="clients-table" class="line-items-table"><thead><tr><th>Organisation Name</th><th>Actions</th></tr></thead><tbody></tbody></table>
+      </div>
+      <div class="tab-pane fade" id="agencies" role="tabpanel">
+        <table id="agencies-table" class="line-items-table"><thead><tr><th>Organisation Name</th><th>Actions</th></tr></thead><tbody></tbody></table>
+      </div>
+      <div class="tab-pane fade" id="suppliers" role="tabpanel">
+        <table id="suppliers-table" class="line-items-table"><thead><tr><th>Organisation Name</th><th>Actions</th></tr></thead><tbody></tbody></table>
+      </div>
+    </div>
 
     <script>
-      async function loadOrganisations() {
-        const res = await authFetch('/organisations');
+      async function loadOrganisationsByType(type, tableId) {
+        const res = await authFetch(`/organisations?type=${type}`);
         const orgs = await res.json();
-        const tbody = document.querySelector("#organisations-table tbody");
+        const tbody = document.querySelector(`#${tableId} tbody`);
         tbody.innerHTML = "";
-
         orgs.forEach(org => {
           const tr = document.createElement("tr");
-
           const nameTd = document.createElement("td");
           nameTd.textContent = org.name;
           tr.appendChild(nameTd);
-
           const actionsTd = document.createElement("td");
           const editBtn = document.createElement("button");
           editBtn.textContent = "✏️";
           editBtn.onclick = () => window.location.href = `orgdetail.html?id=${org.id}`;
           actionsTd.appendChild(editBtn);
+          // Add delete button
+          const deleteBtn = document.createElement("button");
+          deleteBtn.textContent = "🗑️";
+          deleteBtn.style.marginLeft = "8px";
+          deleteBtn.onclick = async () => {
+            if (confirm(`Delete organisation "${org.name}"?`)) {
+              const res = await authFetch(`/organisations/${org.id}`, { method: 'DELETE' });
+              if (res.ok) {
+                loadOrganisationsByType(type, tableId);
+              } else {
+                alert("Failed to delete organisation.");
+              }
+            }
+          };
+          actionsTd.appendChild(deleteBtn);
           tr.appendChild(actionsTd);
-
           tbody.appendChild(tr);
         });
       }
 
-      loadOrganisations();
+      loadOrganisationsByType('client', 'clients-table');
+      loadOrganisationsByType('agency', 'agencies-table');
+      loadOrganisationsByType('supplier', 'suppliers-table');
     </script>
   </main>
   <!-- Socket.IO client -->
