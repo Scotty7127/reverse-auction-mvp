@@ -16,17 +16,78 @@
   <style>
     body { background: #f7f7f7; }
     .page-wrap { max-width: 1200px; margin: 20px auto; }
-    .topbar { display:flex; justify-content: space-between; align-items:center; gap:12px; }
-    .pill { padding:4px 10px; border-radius: 999px; background:#eee; font-weight:600; }
-    .summary { display:grid; grid-template-columns: repeat(3, 1fr); gap:12px; margin-top:12px; }
-    .summary .card { text-align:center; }
-    .grid { display:grid; grid-template-columns: 1.2fr 1fr; gap:16px; margin-top:16px; }
-    .bid-stream { height: 420px; overflow:auto; background:white; border-radius:8px; border:1px solid #e5e5e5; padding:10px; }
-    .bid-entry { display:grid; grid-template-columns: 105px 1fr 80px 110px; gap:8px; padding:8px 6px; border-bottom:1px solid #f0f0f0; font-size: 14px; }
-    .bid-entry.lowest { background:#f3fff3; }
-    .rank-table td, .rank-table th { vertical-align: middle; }
-    .badge-newlow { font-size: 11px; background:#e8f7e8; color:#1c7c1c; border:1px solid #bfe3bf; }
-    .controls { display:flex; gap:8px; align-items:center; }
+    .topbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0.5rem 1rem;
+      background: white;
+      border-radius: 8px;
+      box-shadow: 0 1px 4px rgb(0 0 0 / 0.1);
+      margin-bottom: 8px;
+      gap: 1rem;
+      flex-wrap: wrap;
+    }
+    .topbar-left {
+      font-size: 1.5rem;
+      font-weight: 700;
+      flex: 1 1 auto;
+      min-width: 180px;
+    }
+    .topbar-center {
+      flex: 2 1 400px;
+      text-align: center;
+      font-family: monospace;
+      user-select: none;
+    }
+    .topbar-center .time-main {
+      font-size: 1.25rem;
+      font-weight: 600;
+    }
+    .topbar-center .time-sub {
+      font-size: 0.9rem;
+      color: #666;
+    }
+    .topbar-right {
+      flex: 1 1 auto;
+      min-width: 140px;
+      text-align: right;
+    }
+    .subbar {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 16px;
+      flex-wrap: wrap;
+    }
+    .badge-summary {
+      background: #e9ecef;
+      border-radius: 12px;
+      padding: 6px 14px;
+      font-weight: 600;
+      font-size: 0.9rem;
+      color: #495057;
+      white-space: nowrap;
+      user-select: none;
+    }
+    #chart-container {
+      background: white;
+      border-radius: 8px;
+      padding: 1rem;
+      box-shadow: 0 1px 6px rgb(0 0 0 / 0.1);
+      margin-bottom: 24px;
+    }
+    #ranked-table {
+      background: white;
+      border-radius: 8px;
+      padding: 1rem;
+      box-shadow: 0 1px 6px rgb(0 0 0 / 0.1);
+    }
+    #ranked-table table {
+      margin-bottom: 0;
+    }
+    footer {
+      margin-top: 2rem;
+    }
   </style>
 </head>
 <body>
@@ -45,95 +106,92 @@
   </nav>
 
   <div class="page-wrap">
-    <!-- Topbar / Overview -->
-    <div class="card p-3 mb-3">
-      <div class="topbar">
-        <div>
-          <h3 id="auction-title" class="mb-0">Live Auction</h3>
-          <small id="auction-sub" class="text-muted">Loading event...</small>
-        </div>
-        <div class="controls">
-          <span class="pill" id="auction-status">Loading…</span>
-          <span class="pill">Currency: <span id="currency-pill">—</span></span>
-          <span class="pill">⏱ <span id="countdown">--:--:--</span></span>
-          <button id="pause-resume-btn" class="btn btn-warning">Pause Auction</button>
-          <a id="back-to-event" class="btn btn-outline-secondary" href="#">Back to Event</a>
-        </div>
+    <!-- Topbar -->
+    <div class="topbar" role="banner" aria-label="Auction header">
+      <div class="topbar-left" id="auction-title" aria-live="polite" aria-atomic="true">Live Auction</div>
+      <div class="topbar-center" aria-live="polite" aria-atomic="true">
+        <div class="time-main" id="time-main">Loading...</div>
+        <div class="time-sub" id="time-sub"></div>
       </div>
-      <div class="summary">
-        <div class="card"><div class="card-body"><div class="fw-bold">Total Bids</div><div id="total-bids" class="fs-4">0</div></div></div>
-        <div class="card"><div class="card-body"><div class="fw-bold">Extensions</div><div id="extensions-count" class="fs-4">0</div></div></div>
-        <div class="card"><div class="card-body"><div class="fw-bold">Bidders Connected</div><div id="bidders-connected" class="fs-5">0 / 0</div></div></div>
+      <div class="topbar-right">
+        <button id="pause-resume-btn" class="btn btn-warning" disabled aria-live="polite" aria-atomic="true">Pause Auction</button>
       </div>
     </div>
 
-    <div class="grid">
-      <!-- Ranked table -->
-      <div class="card">
-        <div class="card-body">
-          <div class="d-flex justify-content-between align-items-center mb-2">
-            <h5 class="mb-0">Ranked Bidders</h5>
-            <div class="form-check form-switch">
-              <input class="form-check-input" type="checkbox" id="toggle-weighted">
-              <label class="form-check-label" for="toggle-weighted">Show weighted bids</label>
-            </div>
-          </div>
-          <div class="table-responsive">
-            <table class="table table-striped table-bordered rank-table">
-              <thead>
-                <tr>
-                  <th style="width:60px;">Rank</th>
-                  <th>Bidder</th>
-                  <th id="th-bid">Bid</th>
-                  <th>Savings %</th>
-                  <th>Time</th>
-                </tr>
-              </thead>
-              <tbody id="ranked-body">
-                <tr><td colspan="5" class="text-center text-muted">No bids yet</td></tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </div>
-
-      <!-- Bid stream -->
-      <div class="card">
-        <div class="card-body">
-          <div class="d-flex justify-content-between align-items-center mb-2">
-            <h5 class="mb-0">Live Bid Stream</h5>
-            <small class="text-muted" id="last-updated">Last updated: —</small>
-          </div>
-          <div id="bid-stream" class="bid-stream">
-            <p class="text-muted mb-0">Waiting for bids…</p>
-          </div>
-        </div>
-      </div>
+    <!-- Sub-bar summary badges -->
+    <div class="subbar" aria-label="Auction summary badges">
+      <div class="badge-summary" id="total-bids-badge" aria-live="polite" aria-atomic="true">Total Bids: 0</div>
+      <div class="badge-summary" id="bidders-connected-badge" aria-live="polite" aria-atomic="true">Bidders Connected: 0 / 0</div>
+      <div class="badge-summary" id="extensions-badge" aria-live="polite" aria-atomic="true">Extensions: 0</div>
     </div>
 
-    <!-- Optional chart block (left as placeholder; can wire to Chart.js later) -->
-    <!-- <div class="card mt-3"><div class="card-body"><h5>Bid Trends</h5><canvas id="bid-chart"></canvas></div></div> -->
+    <!-- Chart.js graph -->
+    <section id="chart-container" aria-label="Bidder savings chart">
+      <canvas id="bid-chart" role="img" aria-describedby="chart-desc"></canvas>
+      <div id="chart-desc" class="visually-hidden">
+        Line chart showing bid price over time for each bidder. X-axis is time elapsed in minutes, Y-axis is bid price. Each line represents a bidder. Tooltip shows bidder name, weighted bid, and calculated savings.
+      </div>
+    </section>
+
+    <!-- Ranked table -->
+    <section id="ranked-table" aria-label="Ranked bidders table">
+      <h2 class="h5 mb-3">Ranked Bidders</h2>
+      <div class="table-responsive">
+        <table class="table table-striped table-bordered">
+          <thead>
+            <tr>
+              <th scope="col" style="width:60px;">Rank</th>
+              <th scope="col">Bidder</th>
+              <th scope="col">Total Savings</th>
+              <th scope="col">Total Savings (%)</th>
+            </tr>
+          </thead>
+          <tbody id="ranked-body">
+            <tr><td colspan="4" class="text-center text-muted">No bids yet</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- Bid Stream Table -->
+    <section id="bid-stream-table" aria-label="Bid Stream table" class="mt-4">
+      <h2 class="h5 mb-3">Bid Stream</h2>
+      <div class="table-responsive">
+        <table class="table table-striped table-bordered">
+          <thead>
+            <tr>
+              <th scope="col">Bid ID</th>
+              <th scope="col">Time (in auction)</th>
+              <th scope="col">Bidder</th>
+              <th scope="col">Line Item #</th>
+              <th scope="col">Line Item Name</th>
+            </tr>
+          </thead>
+          <tbody id="bid-stream-body">
+            <tr><td colspan="5" class="text-center text-muted">No bids yet</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
   </div>
 
   <footer class="mt-4"><p class="text-center text-muted">Tendersmith © 2025</p></footer>
 
-  <!-- Socket.IO client -->
+  <!-- Dependencies -->
   <script src="/socket.io/socket.io.js"></script>
-  <!-- Bootstrap JS -->
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
-  <!-- Messaging script (keeps chat icon working) -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.3.0/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@2.2.1"></script>
+  <script src="/auction-graphs.js"></script>
   <script src="/messages.js"></script>
 
   <script>
     // --- Utilities ---
     const currencySymbols = { GBP:'£', USD:'$', EUR:'€', CAD:'$', AUD:'$', NZD:'$', CHF:'CHF', JPY:'¥', CNY:'¥', INR:'₹', SEK:'kr', NOK:'kr', DKK:'kr', PLN:'zł', ZAR:'R' };
-
     function fmtMoney(n, symbol){
-      try { return `${symbol}${Number(n).toLocaleString()}`; } catch { return `${symbol}${n}`; }
+      try { return `${symbol}${Number(n).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`; } catch { return `${symbol}${n}`; }
     }
-
     function pad(n){ return String(n).padStart(2,'0'); }
-
     function formatHMS(ms){
       const s = Math.max(0, Math.floor(ms/1000));
       const hh = pad(Math.floor(s/3600));
@@ -141,193 +199,411 @@
       const ss = pad(s%60);
       return `${hh}:${mm}:${ss}`;
     }
+    function formatHM(ms){
+      const s = Math.max(0, Math.floor(ms/1000));
+      const hh = Math.floor(s/3600);
+      const mm = Math.floor((s%3600)/60);
+      if(hh > 0) return `${hh}h ${mm}m`;
+      return `${mm}m`;
+    }
+    function formatStartsIn(ms){
+      if(ms <= 0) return "Starts now";
+      const s = Math.floor(ms/1000);
+      const days = Math.floor(s / 86400);
+      const hours = Math.floor((s % 86400) / 3600);
+      const minutes = Math.floor((s % 3600) / 60);
+      if(days > 0) return `Starts in ${days} day${days > 1 ? 's' : ''}`;
+      if(hours > 0) return `Starts in ${hours} hour${hours > 1 ? 's' : ''}`;
+      if(minutes > 0) return `Starts in ${minutes} minute${minutes > 1 ? 's' : ''}`;
+      return "Starting soon";
+    }
+    function getRandomColor(seed) {
+      // Generate a consistent pastel color based on seed string
+      let hash = 0;
+      for(let i=0; i<seed.length; i++) {
+        hash = seed.charCodeAt(i) + ((hash << 5) - hash);
+      }
+      const h = hash % 360;
+      return `hsl(${h}, 70%, 60%)`;
+    }
 
     // --- Page state ---
-    let eventId; // from query
+    let eventId = null;
     let eventData = null;
     let currencySymbol = '£';
-    let showWeighted = false;
-    let countdownTimer = null;
+    let auctionStart = null;
+    let auctionDurationMs = 0;
+    let auctionEnd = null;
+    let auctionLive = false;
+    let auctionPaused = false;
+    let countdownInterval = null;
+    // Chart.js chart handled by AuctionGraphs module
 
-    // --- Load event and basic stats ---
+    // Data stores
+    let allBids = []; // all bids loaded or received live
+    let openingBids = []; // injected opening bids from supplier assignments
+    let biddersMap = new Map(); // bidderId -> { user_name, bids: [{time, weightedBid, savings}] }
+    let baselineMap = new Map(); // line_item_id -> { ext_baseline, ext_quantity, item_number, item_name }
+
+    // --- DOM elements ---
+    const auctionTitleEl = document.getElementById('auction-title');
+    const timeMainEl = document.getElementById('time-main');
+    const timeSubEl = document.getElementById('time-sub');
+    const pauseResumeBtn = document.getElementById('pause-resume-btn');
+    const totalBidsBadge = document.getElementById('total-bids-badge');
+    const biddersConnectedBadge = document.getElementById('bidders-connected-badge');
+    const extensionsBadge = document.getElementById('extensions-badge');
+    const rankedBody = document.getElementById('ranked-body');
+
+    // Chart config handled by AuctionGraphs module
+
+    // Track last total baseline for chart reinit
+    let lastTotalBaseline = null;
+
+    // --- Auction time management ---
+    function updateCountdown(){
+      if(!auctionStart) return;
+      const now = new Date();
+      if(!auctionLive){
+        const msUntilStart = auctionStart - now;
+        if(msUntilStart > 0){
+          timeMainEl.textContent = formatStartsIn(msUntilStart);
+          timeSubEl.textContent = `Starts at ${auctionStart.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}`;
+          pauseResumeBtn.disabled = true;
+          pauseResumeBtn.textContent = 'Pause Auction';
+          auctionPaused = false;
+        } else {
+          // Auction just started
+          auctionLive = true;
+          pauseResumeBtn.disabled = false;
+          pauseResumeBtn.textContent = 'Pause Auction';
+          auctionEnd = new Date(auctionStart.getTime() + auctionDurationMs);
+          timeSubEl.textContent = '';
+        }
+      }
+      if(auctionLive){
+        const msLeft = auctionEnd - now;
+        if(msLeft <= 0){
+          timeMainEl.textContent = 'Auction ended';
+          timeSubEl.textContent = '';
+          pauseResumeBtn.disabled = true;
+          auctionLive = false;
+          auctionPaused = true;
+          pauseResumeBtn.textContent = 'Pause Auction';
+          clearInterval(countdownInterval);
+          return;
+        }
+        timeMainEl.textContent = `Time left: ${formatHMS(msLeft)}`;
+      }
+    }
+
+    // --- Bid savings computation ---
+    // savings = (lineItem.ext_baseline - (bid.amount * bid.weighting * lineItem.ext_quantity))
+    function computeBidSavings(bid){
+      if(!bid.line_item_id) return 0;
+      const baselineObj = baselineMap.get(bid.line_item_id);
+      if(!baselineObj) return 0;
+      const extBaseline = baselineObj.ext_baseline || 0;
+      const extQuantity = baselineObj.ext_quantity || 1;
+      const weighting = (typeof bid.weighting === 'number') ? bid.weighting : 1;
+      const weightedBid = bid.amount * weighting * extQuantity;
+      return extBaseline - weightedBid;
+    }
+    function computeWeightedBid(bid){
+      const weighting = (typeof bid.weighting === 'number') ? bid.weighting : 1;
+      return bid.amount * weighting;
+    }
+
+    // --- Load event and baseline data ---
     async function loadEvent(){
       const res = await authFetch(`/events/${eventId}`);
       eventData = await res.json();
+      auctionTitleEl.textContent = eventData.title || 'Live Auction';
+
       const code = (eventData.currency || 'GBP').toUpperCase();
       currencySymbol = currencySymbols[code] || code || '£';
-      document.getElementById('currency-pill').textContent = currencySymbol;
-      document.getElementById('auction-title').textContent = eventData.title || 'Live Auction';
-      document.getElementById('auction-sub').textContent = eventData.description || '';
-      // Back to event link
-      const back = document.getElementById('back-to-event');
-      back.href = `event.html?id=${eventId}&tab=pricing`;
 
-      // Start/End times & status
-      let status = 'Scheduled';
-      if (eventData.auction_time){
-        const start = new Date(eventData.auction_time);
-        const now = new Date();
-        status = now >= start ? 'Live' : 'Scheduled';
-        const durationMin = Number(eventData.auction_duration || 60);
-        const end = new Date(start.getTime() + durationMin*60*1000);
-        startCountdown(end);
+      if(eventData.auction_time){
+        auctionStart = new Date(eventData.auction_time);
       }
-      document.getElementById('auction-status').textContent = status;
+      auctionDurationMs = (Number(eventData.auction_duration) || 60) * 60 * 1000;
+      auctionLive = false;
+      auctionPaused = true;
+      pauseResumeBtn.disabled = true;
+      pauseResumeBtn.textContent = 'Pause Auction';
+
+      // Load baseline data for line items (if available)
+      baselineMap.clear();
+      if(Array.isArray(eventData.line_items)){
+        for(const li of eventData.line_items){
+          if(li.id){
+            baselineMap.set(li.id, {
+              ext_baseline: Number(li.ext_baseline) || 0,
+              ext_quantity: Number(li.ext_quantity) || 1,
+              item_number: li.item_number,
+              item_name: li.item_name
+            });
+          }
+        }
+      }
+
+      // Inject opening bids for suppliers before auction begins, if present
+      // This allows pre-assigned opening prices to display as first bids
+      const supplierAssignments = eventData.supplier_assignments || eventData.assigned_suppliers;
+      if (Array.isArray(supplierAssignments)) {
+        for (const sa of supplierAssignments) {
+          if (sa.opening_bid !== undefined && sa.opening_bid !== null) {
+            openingBids.push({
+              id: `opening-${sa.supplier_id}-${sa.line_item_id}`,
+              user_id: sa.supplier_id,
+              user_name: sa.supplier_name || `Supplier ${sa.supplier_id}`,
+              line_item_id: sa.line_item_id,
+              amount: Number(sa.opening_bid) || 0,
+              weighting: Number(sa.weighting) || 1,
+              created_at: eventData.auction_time || new Date().toISOString()
+            });
+          }
+        }
+        processBids();
+        updateChartAndTable();
+      }
     }
 
-    function startCountdown(end){
-      clearInterval(countdownTimer);
-      countdownTimer = setInterval(()=>{
-        const diff = end - new Date();
-        document.getElementById('countdown').textContent = formatHMS(diff);
-        if (diff <= 0) clearInterval(countdownTimer);
-      }, 1000);
-    }
-
+    // --- Load stats ---
     async function loadStats(){
       try {
         const res = await authFetch(`/events/${eventId}/stats`);
         const s = await res.json();
-        document.getElementById('total-bids').textContent = s.total_bids || 0;
-        document.getElementById('extensions-count').textContent = s.extensions || 0;
-        document.getElementById('bidders-connected').textContent = `${s.bidders_connected || 0} / ${s.total_bidders || 0}`;
-        if (s.auction_time && eventData && eventData.auction_time){ /* already handled */ }
-      } catch(e){ console.error('Stats error', e); }
+        totalBidsBadge.textContent = `Total Bids: ${s.total_bids || 0}`;
+        biddersConnectedBadge.textContent = `Bidders Connected: ${s.bidders_connected || 0} / ${s.total_bidders || 0}`;
+        extensionsBadge.textContent = `Extensions: ${s.extensions || 0}`;
+      } catch(e) {
+        console.error('Stats error', e);
+      }
     }
 
-    // Keep a rolling store of bids (latest first)
-    let allBids = [];
-
+    // --- Load bids ---
     async function loadBids(){
       try {
         const res = await authFetch(`/events/${eventId}/bids`);
         const bids = await res.json();
-        allBids = bids || [];
-        renderBids();
-      } catch(e){ console.error('Bids error', e); }
-    }
-
-    function computeBidValue(b){
-      // Prefer server-provided effective_amount/weighting if present
-      const weighting = (typeof b.weighting === 'number' ? b.weighting : null);
-      const effective = (typeof b.effective_amount === 'number' ? b.effective_amount : null);
-      if (showWeighted){
-        if (effective != null) return effective;
-        if (weighting != null) return b.amount * weighting;
+        allBids = (bids || []);
+        // Prepend opening bids if they exist and aren't already present
+        const existingIds = new Set(allBids.map(b => String(b.id)));
+        openingBids.forEach(ob => {
+          if (!existingIds.has(String(ob.id))) allBids.unshift(ob);
+        });
+        processBids();
+        updateChartAndTable();
+      } catch(e) {
+        console.error('Bids error', e);
       }
-      return b.amount;
     }
 
-    function renderBids(){
-      const tbody = document.getElementById('ranked-body');
-      const stream = document.getElementById('bid-stream');
-      const nowStr = new Date().toLocaleTimeString();
-      document.getElementById('last-updated').textContent = `Last updated: ${nowStr}`;
+    // --- Process bids for chart and ranking ---
+    // Organize bids by bidder with time elapsed and savings
+    function processBids(){
+      biddersMap.clear();
 
-      if (!allBids.length){
+      // Sort bids by created_at ascending for time series
+      allBids.sort((a,b) => new Date(a.created_at) - new Date(b.created_at));
+
+      for(const bid of allBids){
+        if(!bid.user_id) continue;
+        if(!auctionStart) continue;
+        const bidderId = bid.user_id;
+        const bidderName = bid.user_name || `Bidder ${bidderId}`;
+
+        // Calculate time elapsed in minutes from auctionStart
+        const createdAt = new Date(bid.created_at);
+        const elapsedMs = createdAt - auctionStart;
+        // Allow opening bids even if before auction start
+        if (elapsedMs < 0 && !(bid.id && bid.id.startsWith('opening-'))) continue;
+
+        const elapsedMinutes = elapsedMs / 60000;
+
+        // Compute extendedBid: amount * weighting * ext_quantity
+        const weighting = (typeof bid.weighting === 'number') ? bid.weighting : 1;
+        const extQuantity = baselineMap.get(bid.line_item_id)?.ext_quantity || 1;
+        const extendedBid = bid.amount * weighting * extQuantity;
+        const savings = computeBidSavings(bid);
+
+        if(!biddersMap.has(bidderId)){
+          biddersMap.set(bidderId, {
+            user_name: bidderName,
+            bids: []
+          });
+        }
+        biddersMap.get(bidderId).bids.push({
+          time: elapsedMinutes,
+          extendedBid,
+          savings,
+          line_item_id: bid.line_item_id,
+          rawBid: bid
+        });
+      }
+    }
+
+    // --- Update Chart and Ranked Table ---
+    function updateChartAndTable(){
+      // Compute total baseline for all line items (sum of ext_baseline only)
+      const totalBaseline = Array.from(baselineMap.values()).reduce((acc, li) => acc + (li.ext_baseline || 0), 0);
+
+      // Only reinitialize chart if the baseline has changed
+      if (lastTotalBaseline === null || totalBaseline !== lastTotalBaseline) {
+        lastTotalBaseline = totalBaseline;
+        console.log('Baseline changed, reinitializing chart:', totalBaseline);
+        AuctionGraphs.initChart('bid-chart', totalBaseline, currencySymbol);
+      }
+      AuctionGraphs.showSavingsByBidder(biddersMap, currencySymbol, totalBaseline);
+
+      // Compute rankings
+      const ranking = [];
+      biddersMap.forEach((bidder, bidderId) => {
+        // Sum total savings and total weighted bid for last bid
+        const totalSavings = bidder.bids.reduce((acc, b) => acc + b.savings, 0);
+        const lastWeightedBid = bidder.bids.length ? bidder.bids[bidder.bids.length - 1].weightedBid : 0;
+        const savingsPercent = totalBaseline > 0 ? (totalSavings / totalBaseline) * 100 : 0;
+        ranking.push({
+          user_id: bidderId,
+          user_name: bidder.user_name,
+          totalSavings,
+          savingsPercent
+        });
+      });
+      ranking.sort((a,b) => b.totalSavings - a.totalSavings);
+
+      // Render ranked table
+      if(ranking.length === 0){
+        rankedBody.innerHTML = '<tr><td colspan="4" class="text-center text-muted">No bids yet</td></tr>';
+      } else {
+        rankedBody.innerHTML = ranking.map((r,i) => {
+          return `<tr>
+            <td>${i+1}</td>
+            <td>${r.user_name}</td>
+            <td>${fmtMoney(r.totalSavings, currencySymbol)}</td>
+            <td>${r.savingsPercent.toFixed(2)}%</td>
+          </tr>`;
+        }).join('');
+      }
+      updateBidStream();
+    }
+
+    // --- Bid Stream Table update ---
+    function updateBidStream() {
+      const tbody = document.getElementById('bid-stream-body');
+      if(!tbody) return;
+      if(allBids.length === 0){
         tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">No bids yet</td></tr>';
-        stream.innerHTML = '<p class="text-muted mb-0">Waiting for bids…</p>';
         return;
       }
-
-      // Latest bid per bidder (lowest wins)
-      const latestByUser = {};
-      for (const b of allBids){
-        const key = b.user_id;
-        if (!latestByUser[key] || new Date(b.created_at) > new Date(latestByUser[key].created_at)){
-          latestByUser[key] = b;
-        }
-      }
-      const rows = Object.values(latestByUser).map(b => ({...b, value: computeBidValue(b)}));
-      rows.sort((a,b) => a.value - b.value);
-
-      const best = rows[0].value;
-      tbody.innerHTML = rows.map((b, i) => {
-        const savings = best > 0 ? (((best - b.value)/best)*100).toFixed(2) : '0.00';
-        return `
-          <tr class="${i===0? 'table-success':''}">
-            <td>${i+1}</td>
-            <td>${b.user_name || ('Bidder '+b.user_id)}</td>
-            <td>${fmtMoney(b.value, currencySymbol)}</td>
-            <td>${savings}%</td>
-            <td>${new Date(b.created_at).toLocaleTimeString()}</td>
-          </tr>`;
+      allBids.sort((a,b)=>new Date(a.created_at)-new Date(b.created_at));
+      tbody.innerHTML = allBids.map(b=>{
+        const li = baselineMap.get(b.line_item_id);
+        const lineNum = li?.item_number || b.line_item_id || '-';
+        const lineName = li?.item_name || '-';
+        const timeInAuction = auctionStart ? ((new Date(b.created_at) - auctionStart)/60000).toFixed(1) + 'm' : '-';
+        return `<tr>
+          <td>${b.id}</td>
+          <td>${timeInAuction}</td>
+          <td>${b.user_name || 'Unknown'}</td>
+          <td>${lineNum}</td>
+          <td>${lineName}</td>
+        </tr>`;
       }).join('');
-
-      // Bid stream (newest first)
-      const streamHtml = [...allBids]
-        .sort((a,b)=> new Date(b.created_at) - new Date(a.created_at))
-        .map((b,i)=>{
-          const val = computeBidValue(b);
-          const isLowest = val === best;
-          return `
-            <div class="bid-entry ${isLowest? 'lowest':''}">
-              <span class="text-muted">${new Date(b.created_at).toLocaleTimeString()}</span>
-              <span><strong>${b.user_name || ('Bidder '+b.user_id)}</strong></span>
-              <span class="text-nowrap">#${b.line_item_id || '-'}</span>
-              <span class="text-end">${fmtMoney(val, currencySymbol)} ${isLowest? '<span class="badge badge-newlow ms-1">new low</span>':''}</span>
-            </div>`;
-        }).join('');
-      stream.innerHTML = streamHtml;
-
-      // Update header based on toggle
-      document.getElementById('th-bid').textContent = showWeighted ? `Weighted Bid` : `Bid`;
     }
 
+    // --- Socket.IO integration ---
+    let socket = null;
     function connectSocket(){
-      const sock = io(window.location.origin, { transports: ["websocket"] });
-      sock.emit('join_event', eventId);
+      const token = localStorage.getItem('token');
+      socket = io(window.location.origin, {
+        transports: ["websocket"],
+        auth: { token },
+        query: { event_id: eventId }
+      });
+      socket.emit('join_event', eventId);
 
-      sock.on('bid_update', (bid)=>{
-        // Push and re-render; rely on server payload shape
+      socket.on('bid_update', (bid) => {
+        if(!bid.user_id) return;
         allBids.push(bid);
-        renderBids();
+        processBids();
+        updateChartAndTable();
         loadStats();
       });
 
-      sock.on('bidders_count_update', loadStats);
-      sock.on('auction_paused', ()=>{
-        document.getElementById('auction-status').textContent = 'Paused';
+      socket.on('bidders_count_update', loadStats);
+
+      socket.on('auction_paused', () => {
+        auctionPaused = true;
+        pauseResumeBtn.textContent = 'Resume Auction';
+        timeMainEl.textContent = 'Auction paused';
         alert('⏸️ Auction paused.');
       });
-      sock.on('auction_resumed', ()=>{
-        document.getElementById('auction-status').textContent = 'Live';
+
+      socket.on('auction_resumed', () => {
+        auctionPaused = false;
+        pauseResumeBtn.textContent = 'Pause Auction';
         alert('▶️ Auction resumed.');
+        updateChartAndTable();
+      });
+
+      socket.on('connect_error', (err) => {
+        console.error('Socket connect_error:', err?.message || err);
       });
     }
 
+    // --- Pause/Resume toggle ---
     async function togglePauseResume(){
-      const btn = document.getElementById('pause-resume-btn');
-      const isPause = btn.textContent.toLowerCase().includes('pause');
-      try{
-        const res = await authFetch(`/events/${eventId}/${isPause? 'pause':'resume'}`, { method:'PATCH' });
-        if (res.ok){
-          btn.textContent = isPause? 'Resume Auction' : 'Pause Auction';
-          document.getElementById('auction-status').textContent = isPause? 'Paused':'Live';
+      if(!auctionLive) return;
+      try {
+        const isPause = pauseResumeBtn.textContent.toLowerCase().includes('pause');
+        const res = await authFetch(`/events/${eventId}/${isPause ? 'pause' : 'resume'}`, { method:'PATCH' });
+        if(res.ok){
+          if(isPause){
+            auctionPaused = true;
+            pauseResumeBtn.textContent = 'Resume Auction';
+            timeMainEl.textContent = 'Auction paused';
+          } else {
+            auctionPaused = false;
+            pauseResumeBtn.textContent = 'Pause Auction';
+            updateChartAndTable();
+          }
         }
-      }catch(e){ console.error(e); }
+      } catch(e) {
+        console.error(e);
+      }
     }
 
-    // --- Init ---
-    document.addEventListener('DOMContentLoaded', async ()=>{
+    // --- Initialization ---
+    document.addEventListener('DOMContentLoaded', async () => {
       const params = new URLSearchParams(window.location.search);
       eventId = params.get('event_id');
-      if (!eventId){
+      if(!eventId){
         alert('Missing event_id');
         window.location.href = 'events.html';
         return;
       }
 
-      document.getElementById('toggle-weighted').addEventListener('change', (e)=>{
-        showWeighted = e.target.checked;
-        renderBids();
-      });
-      document.getElementById('pause-resume-btn').addEventListener('click', togglePauseResume);
+      pauseResumeBtn.addEventListener('click', togglePauseResume);
 
       await loadEvent();
       await loadStats();
       await loadBids();
+
+      // Ensure chart initializes correctly on first page load with proper baseline
+      const totalBaseline = Array.from(baselineMap.values()).reduce((acc, li) => acc + (li.ext_baseline || 0), 0);
+      lastTotalBaseline = totalBaseline;
+      console.log('Initial chart baseline setup:', totalBaseline);
+      AuctionGraphs.initChart('bid-chart', totalBaseline, currencySymbol);
+      AuctionGraphs.showSavingsByBidder(biddersMap, currencySymbol, totalBaseline);
       connectSocket();
+
+      // Countdown timer updates every second
+      countdownInterval = setInterval(() => {
+        updateCountdown();
+      }, 1000);
+      updateCountdown();
     });
   </script>
 </body>

@@ -272,6 +272,12 @@ async function runMigrations() {
       );
     `);
     console.log("✅ Startup migrations complete.");
+    // Ensure performance indexes exist for common queries
+    await pool.query("CREATE INDEX IF NOT EXISTS bids_event_idx ON bids(event_id);");
+    await pool.query("CREATE INDEX IF NOT EXISTS bids_event_line_idx ON bids(event_id, line_item_id);");
+    await pool.query("CREATE INDEX IF NOT EXISTS slis_event_idx ON supplier_line_item_settings(event_id);");
+    await pool.query("CREATE INDEX IF NOT EXISTS slis_event_line_idx ON supplier_line_item_settings(event_id, line_item_id);");
+    console.log("✅ Performance indexes ensured.");
   } catch (err) {
     console.error("❌ Migration error:", err.message);
   }
@@ -573,42 +579,6 @@ app.get("/users", ensureAuthenticated, async (req, res) => {
 });
 
 
-// ---- WebSockets ----
-io.on("connection", (socket) => {
-  console.log("Client connected");
-
-  socket.on("join_lot", (lotId) => {
-    socket.join(`lot_${lotId}`);
-    console.log(`Client joined lot ${lotId}`);
-  });
-
-  // === Auction Real-Time Events ===
-  socket.on("join_event", (eventId) => {
-    socket.join(`event_${eventId}`);
-    console.log(`Client joined event ${eventId}`);
-    io.to(`event_${eventId}`).emit("bidders_count_update");
-  });
-
-  socket.on("new_bid", async (data) => {
-    try {
-      const { event_id, user_id, line_item_id, amount } = data;
-      const result = await pool.query(
-        `INSERT INTO bids (event_id, user_id, line_item_id, amount)
-         VALUES ($1, $2, $3, $4)
-         RETURNING *`,
-        [event_id, user_id, line_item_id || null, amount]
-      );
-      const bid = result.rows[0];
-      io.to(`event_${event_id}`).emit("bid_update", bid);
-    } catch (err) {
-      console.error("Error saving socket bid:", err);
-    }
-  });
-
-  socket.on("disconnect", () => {
-    console.log("Client disconnected");
-  });
-});
 
 // === Submit a new bid ===
 app.post("/events/:id/bids", ensureAuthenticated, async (req, res) => {
@@ -629,8 +599,15 @@ app.post("/events/:id/bids", ensureAuthenticated, async (req, res) => {
     );
 
     const bid = result.rows[0];
-    io.to(`event_${eventId}`).emit("bid_update", bid);
-    res.json(bid);
+    const ures = await pool.query(
+      'SELECT first_name, last_name, email FROM users WHERE id=$1',
+      [userId]
+    );
+    const u = ures.rows[0] || {};
+    const display_name = `${(u.first_name || '').trim()} ${(u.last_name || '').trim()}`.trim() || u.email || `User ${userId}`;
+    const enriched = { ...bid, display_name };
+    io.to(`event_${eventId}`).emit("bid_update", enriched);
+    res.json(enriched);
   } catch (err) {
     console.error("Error submitting bid:", err);
     res.status(500).json({ error: "Failed to submit bid" });
@@ -648,6 +625,13 @@ app.post("/events/:id/bids/bulk", ensureAuthenticated, async (req, res) => {
       return res.status(400).json({ error: "No bids provided" });
     }
 
+    const ures = await pool.query(
+      'SELECT first_name, last_name, email FROM users WHERE id=$1',
+      [userId]
+    );
+    const u = ures.rows[0] || {};
+    const display_name = `${(u.first_name || '').trim()} ${(u.last_name || '').trim()}`.trim() || u.email || `User ${userId}`;
+
     const insertedBids = [];
     for (const bid of bids) {
       const { line_item_id, amount } = bid;
@@ -659,10 +643,11 @@ app.post("/events/:id/bids/bulk", ensureAuthenticated, async (req, res) => {
          RETURNING *`,
         [eventId, userId, line_item_id, amount]
       );
-      insertedBids.push(result.rows[0]);
+      const enriched = { ...result.rows[0], display_name };
+      insertedBids.push(enriched);
 
       // Broadcast each bid update in real-time
-      io.to(`event_${eventId}`).emit("bid_update", result.rows[0]);
+      io.to(`event_${eventId}`).emit("bid_update", enriched);
     }
 
     res.json({ success: true, inserted: insertedBids.length });
@@ -758,10 +743,10 @@ app.get("/events", ensureAuthenticated, async (req, res) => {
   }
 });
 
-// Get a single event by ID
+// Get a single event by ID (with line items and supplier assignments)
 app.get("/events/:id", async (req, res) => {
   try {
-    const result = await pool.query(`
+    const eventResult = await pool.query(`
       SELECT e.*, 
              o.name AS organisation_name, 
              c.name AS category_name,
@@ -773,13 +758,68 @@ app.get("/events/:id", async (req, res) => {
       LEFT JOIN categories c ON e.category_id = c.id
       WHERE e.id = $1
     `, [req.params.id]);
-    if (result.rows.length === 0) {
+
+    if (eventResult.rows.length === 0) {
       return res.status(404).json({ error: "Event not found" });
     }
-    res.json(result.rows[0]);
+    const event = eventResult.rows[0];
+
+    // Include all line items for this event
+    const lineItems = await pool.query(`
+      SELECT li.*, l.title AS lot_title
+      FROM line_items li
+      JOIN lots l ON li.lot_id = l.id
+      WHERE l.event_id = $1
+      ORDER BY l.id ASC, li.id ASC
+    `, [req.params.id]);
+    event.line_items = lineItems.rows;
+
+    // Include all supplier assignments for this event
+    const supplierAssignments = await pool.query(`
+      SELECT 
+        s.event_id,
+        s.line_item_id,
+        s.supplier_id,
+        COALESCE(s.weighting, 1.0) AS weighting,
+        s.opening_bid,
+        (u.first_name || ' ' || u.last_name) AS supplier_name,
+        u.email AS supplier_email
+      FROM supplier_line_item_settings s
+      JOIN users u ON u.id = s.supplier_id
+      WHERE s.event_id = $1
+      ORDER BY supplier_name ASC, s.line_item_id ASC
+    `, [req.params.id]);
+    event.supplier_assignments = supplierAssignments.rows;
+
+    res.json(event);
   } catch (err) {
     console.error("Error fetching event:", err);
     res.status(500).json({ error: err.message });
+  }
+});
+
+// Get all supplier assignments for an event (opening bids + weighting, by line item)
+app.get("/events/:id/supplier-assignments", ensureAuthenticated, async (req, res) => {
+  try {
+    const eventId = req.params.id;
+    const result = await pool.query(`
+      SELECT 
+        s.event_id,
+        s.line_item_id,
+        s.supplier_id,
+        COALESCE(s.weighting, 1.0) AS weighting,
+        s.opening_bid,
+        (u.first_name || ' ' || u.last_name) AS supplier_name,
+        u.email AS supplier_email
+      FROM supplier_line_item_settings s
+      JOIN users u ON u.id = s.supplier_id
+      WHERE s.event_id = $1
+      ORDER BY supplier_name ASC, s.line_item_id ASC
+    `, [eventId]);
+    res.json(result.rows);
+  } catch (err) {
+    console.error("Error fetching event supplier assignments:", err);
+    res.status(500).json({ error: "Failed to fetch supplier assignments" });
   }
 });
 
@@ -1236,6 +1276,21 @@ app.put("/line-items/:id", async (req, res) => {
 
 // Delete a line item by ID
 app.delete("/line-items/:id", async (req, res) => {
+  try {
+    const result = await pool.query(
+      "DELETE FROM line_items WHERE id = $1 RETURNING *",
+      [req.params.id]
+    );
+    if (result.rowCount === 0) {
+      return res.status(404).json({ error: "Line item not found" });
+    }
+    res.json({ success: true, message: "Line item deleted" });
+  } catch (err) {
+    console.error("Error deleting line item:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // === Supplier Line Item Settings ===
 
 // POST /events/:eventId/line-items/:lineItemId/supplier-settings
@@ -1246,7 +1301,7 @@ app.post("/events/:eventId/line-items/:lineItemId/supplier-settings", ensureAuth
     if (!supplier_id) {
       return res.status(400).json({ error: "supplier_id is required" });
     }
-    // weighting and opening_bid can be null, but if present, must be numbers
+
     let w = weighting;
     let ob = opening_bid;
     if (w !== undefined && w !== null && w !== "") {
@@ -1261,7 +1316,7 @@ app.post("/events/:eventId/line-items/:lineItemId/supplier-settings", ensureAuth
     } else {
       ob = null;
     }
-    // Upsert (insert or update) the supplier_line_item_settings row
+
     const result = await pool.query(
       `
       INSERT INTO supplier_line_item_settings (event_id, line_item_id, supplier_id, weighting, opening_bid)
@@ -1297,20 +1352,6 @@ app.get("/events/:eventId/line-items/:lineItemId/supplier-settings", ensureAuthe
   } catch (err) {
     console.error("Error fetching supplier_line_item_settings:", err);
     res.status(500).json({ error: "Failed to fetch supplier settings" });
-  }
-});
-  try {
-    const result = await pool.query(
-      "DELETE FROM line_items WHERE id = $1 RETURNING *",
-      [req.params.id]
-    );
-    if (result.rowCount === 0) {
-      return res.status(404).json({ error: "Line item not found" });
-    }
-    res.json({ success: true, message: "Line item deleted" });
-  } catch (err) {
-    console.error("Error deleting line item:", err);
-    res.status(500).json({ error: err.message });
   }
 });
 
@@ -1733,6 +1774,47 @@ io.on("connection", (socket) => {
     socket.user = decoded;
     socket.join(`user_${decoded.id}`);
     console.log(`✅ ${decoded.email} connected to messaging`);
+
+    // === Auction Real-Time Events (Authenticated) ===
+    socket.on("join_lot", (lotId) => {
+      socket.join(`lot_${lotId}`);
+      console.log(`Client joined lot ${lotId}`);
+    });
+
+    socket.on("join_event", (eventId) => {
+      socket.join(`event_${eventId}`);
+      console.log(`Client joined event ${eventId}`);
+      io.to(`event_${eventId}`).emit("bidders_count_update");
+    });
+
+    socket.on("new_bid", async (data) => {
+      try {
+        const { event_id, line_item_id, amount } = data || {};
+        if (!event_id || !amount || isNaN(Number(amount))) return;
+        const user_id = socket.user.id; // ignore any client-sent user_id
+
+        const insert = await pool.query(
+          `INSERT INTO bids (event_id, user_id, line_item_id, amount)
+           VALUES ($1, $2, $3, $4)
+           RETURNING id, event_id, user_id, line_item_id, amount, created_at`,
+          [event_id, user_id, line_item_id || null, amount]
+        );
+        const bid = insert.rows[0];
+
+        // attach display_name for the frontend
+        const ures = await pool.query(
+          `SELECT first_name, last_name, email FROM users WHERE id=$1`,
+          [user_id]
+        );
+        const u = ures.rows[0] || {};
+        bid.display_name = `${(u.first_name || "").trim()} ${(u.last_name || "").trim()}`.trim() || u.email || `User ${user_id}`;
+
+        io.to(`event_${event_id}`).emit("bid_update", bid);
+      } catch (err) {
+        console.error("Error saving socket bid:", err);
+      }
+    });
+    // === End Auction Real-Time Events (Authenticated) ===
   } catch (err) {
     console.error("❌ Invalid token:", err.message);
     socket.disconnect();
@@ -2033,16 +2115,24 @@ app.post("/events/:id/reveal-bidders", ensureAuthenticated, async (req, res) => 
   }
 });
 
-// === Get Bids for Event with Masking Support ===
+// === Get Bids for Event with Masking Support (Fixed visibility for sealed auctions) ===
 app.get("/events/:id/bids", ensureAuthenticated, async (req, res) => {
   try {
     const eventId = req.params.id;
-    const eventResult = await pool.query("SELECT type, reveal_bidders FROM events WHERE id=$1", [eventId]);
-    if (eventResult.rows.length === 0) return res.status(404).json({ error: "Event not found" });
+    const userId = req.user.id;
+    const role = req.user.role;
+
+    // Fetch event info
+    const eventResult = await pool.query(
+      "SELECT type, reveal_bidders FROM events WHERE id=$1",
+      [eventId]
+    );
+    if (eventResult.rows.length === 0)
+      return res.status(404).json({ error: "Event not found" });
     const event = eventResult.rows[0];
 
-    // Use full bid data with correct field names and timestamps, sorted by newest
-    const bidsResult = await pool.query(`
+    // Always return bids, but filter for bidders
+    let bidsQuery = `
       SELECT 
         b.id, 
         b.amount, 
@@ -2056,27 +2146,60 @@ app.get("/events/:id/bids", ensureAuthenticated, async (req, res) => {
       LEFT JOIN users u ON b.user_id = u.id
       WHERE b.event_id = $1
       ORDER BY b.created_at DESC
-    `, [eventId]);
-    const bids = bidsResult.rows;
+    `;
 
-    // If sealed and not revealed, mask bidder identities for non-managers
-    if (event.type === "sealed" && !event.reveal_bidders && req.user.role !== "manager") {
-      const nameMap = {};
-      let counter = 0;
+    const bidsResult = await pool.query(bidsQuery, [eventId]);
+    let bids = bidsResult.rows;
+
+    // === ROLE LOGIC ===
+    if (role === "bidder") {
+      // Bidders only see their own bids
+      bids = bids.filter((b) => b.bidder_id === userId);
+      // Add rank calculation per line item
       for (const b of bids) {
-        if (!nameMap[b.bidder_id]) {
-          nameMap[b.bidder_id] = `Company ${String.fromCharCode(65 + counter++)}`;
-        }
-        b.display_name = nameMap[b.bidder_id];
+        const rankResult = await pool.query(
+          `
+          SELECT COUNT(*) + 1 AS rank
+          FROM (
+            SELECT DISTINCT ON (user_id) user_id, amount
+            FROM bids
+            WHERE event_id = $1 AND line_item_id = $2
+            ORDER BY user_id, created_at DESC
+          ) AS latest_bids
+          WHERE latest_bids.amount < $3
+        `,
+          [eventId, b.line_item_id, b.amount]
+        );
+        b.rank = parseInt(rankResult.rows[0].rank, 10);
       }
-    } else {
-      // Use real names for managers or open events
-      for (const b of bids) {
-        b.display_name = `${b.first_name || ""} ${b.last_name || ""}`.trim() || b.email;
-      }
+      return res.json(bids);
     }
 
-    res.json(bids);
+    // === MANAGERS ===
+    if (role === "manager") {
+      // Managers always see all bids
+      if (event.type === "sealed" && !event.reveal_bidders) {
+        // Mask bidder names, but keep bids visible
+        const nameMap = {};
+        let counter = 0;
+        for (const b of bids) {
+          if (!nameMap[b.bidder_id]) {
+            nameMap[b.bidder_id] = `Company ${String.fromCharCode(65 + counter++)}`;
+          }
+          b.display_name = nameMap[b.bidder_id];
+        }
+      } else {
+        // Open or revealed → show real names
+        for (const b of bids) {
+          b.display_name =
+            `${b.first_name || ""} ${b.last_name || ""}`.trim() || b.email;
+        }
+      }
+      return res.json(bids);
+    }
+
+    // Default fallback (no role match)
+    res.status(403).json({ error: "Unauthorized role" });
   } catch (err) {
     console.error("Error fetching bids:", err);
     res.status(500).json({ error: "Failed to fetch bids" });

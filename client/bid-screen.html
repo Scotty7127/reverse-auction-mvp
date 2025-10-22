@@ -211,7 +211,11 @@
 
     // === Connect socket ===
     function connectSocket() {
-      const auctionSocket = io(window.location.origin, { transports: ["websocket"] });
+      const token = localStorage.getItem("token");
+      const auctionSocket = io(window.location.origin, {
+        transports: ["websocket"],
+        auth: { token }
+      });
       auctionSocket.emit("join_event", eventId);
 
       auctionSocket.on("bid_update", (bid) => {
