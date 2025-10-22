@@ -12,6 +12,13 @@
   </script>
   <script src="/config.js"></script>
   <script src="/auth.js"></script>
+  <style>
+    /* Show greyed placeholder text for empty editable cells using data-placeholder */
+    td.line-item-cell:empty::before {
+      content: attr(data-placeholder);
+      color: #9aa0a6;
+    }
+  </style>
 </head>
 <body>
   <header>
@@ -83,16 +90,98 @@
     const params = new URLSearchParams(window.location.search);
     const lotId = params.get("id");
 
+    let currencySymbol = '£';
+    // Helper function to map currency codes to symbols
+    function getCurrencySymbol(code) {
+      const map = {
+        GBP: '£',
+        USD: '$',
+        EUR: '€',
+        JPY: '¥',
+        AUD: 'A$',
+        CAD: 'C$',
+        CHF: 'CHF',
+        CNY: '¥',
+        SEK: 'kr',
+        NZD: 'NZ$'
+      };
+      return map[code] || '£';
+    }
+
     async function loadLot() {
       const res = await authFetch(`/lots/${lotId}`);
       const lot = await res.json();
       document.getElementById("lot-title").textContent = lot.title;
       document.getElementById("lot-description").textContent = lot.description || "";
-      document.getElementById("lot-time").textContent = lot.auction_time
-        ? new Date(lot.auction_time).toLocaleString(undefined, {
-            hour: "numeric", minute: "2-digit", hour12: true, timeZoneName: "short"
-          })
-        : "-";
+
+      // Fetch event to get currency code and symbol
+      if (lot.event_id) {
+        try {
+          const eventRes = await authFetch(`/events/${lot.event_id}`);
+          const eventData = await eventRes.json();
+          if (lot.currency_code) {
+            currencySymbol = getCurrencySymbol(lot.currency_code.toUpperCase());
+          } else if (eventData.currency || eventData.currency_code) {
+            const code = (eventData.currency || eventData.currency_code).toUpperCase();
+            currencySymbol = getCurrencySymbol(code);
+          } else {
+            currencySymbol = '£';
+          }
+          updateAllPlaceholders();
+        } catch (err) {
+          console.error("Error fetching event for currency code:", err);
+        }
+      }
+
+
+      return lot;
+    }
+
+    // Helper to format placeholder text given decimals and currency symbol
+    function formatPlaceholder(decimals) {
+      const decimalCount = Number.isInteger(decimals) && decimals >= 0 ? decimals : 2;
+      if (decimalCount === 0) {
+        return currencySymbol + '0';
+      } else {
+        return currencySymbol + '0.' + '0'.repeat(decimalCount);
+      }
+    }
+
+    function updateAllPlaceholders() {
+      const rows = document.querySelectorAll("#line-items-table tbody tr");
+      rows.forEach(tr => {
+        let decimalsCell = tr.querySelector('td[data-field="decimals"]');
+        let decimals = 2;
+        if (decimalsCell) {
+          const val = parseInt(decimalsCell.textContent.trim());
+          if (!isNaN(val) && val >= 0) decimals = val;
+        }
+        const fields = ["decrement", "baseline", "ext_baseline", "opening_value", "reserve_value"];
+        fields.forEach(field => {
+          const cell = tr.querySelector(`td[data-field="${field}"]`);
+          if (cell) cell.setAttribute('data-placeholder', formatPlaceholder(decimals));
+        });
+      });
+    }
+
+    function updateExtBaseline(tr) {
+      const baselineCell = tr.querySelector('td[data-field="baseline"]');
+      const extQtyCell = tr.querySelector('td[data-field="ext_quantity"]');
+      const extBaseCell = tr.querySelector('td[data-field="ext_baseline"]');
+      const decimalsCell = tr.querySelector('td[data-field="decimals"]');
+      if (!baselineCell || !extQtyCell || !extBaseCell) return;
+      let baselineText = baselineCell.textContent.trim().replace(/[^0-9.\-]/g, "");
+      const baseline = parseFloat(baselineText) || 0;
+      const qty = parseFloat(extQtyCell.textContent.trim()) || 0;
+      const decimals = parseInt(decimalsCell?.textContent.trim()) || 2;
+      const result = baseline * qty;
+      extBaseCell.textContent = result ? (currencySymbol + result.toFixed(decimals)) : '';
+    }
+
+    function formatNumericValue(value, decimals) {
+      if (isNaN(value) || value === null || value === '') return '';
+      const num = parseFloat(value);
+      return num.toFixed(decimals);
     }
 
     async function loadLineItems() {
@@ -101,6 +190,20 @@
       const tbody = document.querySelector("#line-items-table tbody");
       tbody.innerHTML = "";
       items.forEach((item) => addRow(item));
+      updateAllPlaceholders();
+      // Ensure proper numeric formatting with currency symbol and decimals after loading or saving
+      const rows = document.querySelectorAll("#line-items-table tbody tr");
+      rows.forEach(tr => {
+        const decimalsCell = tr.querySelector('td[data-field="decimals"]');
+        const decimals = decimalsCell ? parseInt(decimalsCell.textContent.trim()) || 2 : 2;
+        ["decrement", "baseline", "ext_baseline", "opening_value", "reserve_value"].forEach(field => {
+          const cell = tr.querySelector(`td[data-field="${field}"]`);
+          if (cell && cell.textContent.trim() !== '') {
+            let num = parseFloat(cell.textContent.replace(/[^0-9.\-]/g, ''));
+            if (!isNaN(num)) cell.textContent = currencySymbol + num.toFixed(decimals);
+          }
+        });
+      });
     }
 
     function addRow(item = {}) {
@@ -124,9 +227,149 @@
           td.contentEditable = true;
           td.dataset.field = col;
           td.textContent = item[col] !== undefined && item[col] !== null ? item[col] : "";
+          if (
+            ["decrement", "baseline", "ext_baseline", "opening_value", "reserve_value"].includes(col) &&
+            item[col] !== undefined && item[col] !== null && item[col] !== ""
+          ) {
+            let val = parseFloat(item[col]);
+            if (!isNaN(val)) {
+              const decimalsCell = tr.querySelector('td[data-field="decimals"]');
+              const decimals = decimalsCell ? parseInt(decimalsCell.textContent.trim()) || 2 : 2;
+              td.textContent = currencySymbol + val.toFixed(decimals);
+            }
+          }
+          // Set placeholder for decrement, baseline, ext_baseline, opening_value, reserve_value based on decimals and currency symbol
+          if (["decrement", "baseline", "ext_baseline", "opening_value", "reserve_value"].includes(col)) {
+            // placeholders will be set after row creation
+          }
+          if (col === "decimals") {
+            // Add event listener to update placeholders on decimals change
+            td.addEventListener("input", () => {
+              let decimals = parseInt(td.textContent.trim());
+              if (isNaN(decimals) || decimals < 0) decimals = 2;
+              // Update placeholders for decrement, baseline, ext_baseline, opening_value, reserve_value cells in this row
+              const fields = ["decrement", "baseline", "ext_baseline", "opening_value", "reserve_value"];
+              fields.forEach(field => {
+                const cell = tr.querySelector(`td[data-field="${field}"]`);
+                if (cell) cell.setAttribute('data-placeholder', formatPlaceholder(decimals));
+              });
+            });
+          }
         }
         tr.appendChild(td);
       });
+
+      // After all cells created, set placeholders for decrement, baseline, ext_baseline, opening_value, reserve_value based on decimals
+      let decimalsCell = tr.querySelector('td[data-field="decimals"]');
+      let decimals = 2;
+      if (decimalsCell) {
+        const val = parseInt(decimalsCell.textContent.trim());
+        if (!isNaN(val) && val >= 0) decimals = val;
+      }
+      const decrementCell = tr.querySelector('td[data-field="decrement"]');
+      const baselineCell = tr.querySelector('td[data-field="baseline"]');
+      const extBaselineCell = tr.querySelector('td[data-field="ext_baseline"]');
+      const openingCell = tr.querySelector('td[data-field="opening_value"]');
+      const reserveCell = tr.querySelector('td[data-field="reserve_value"]');
+      if (decrementCell) decrementCell.setAttribute('data-placeholder', formatPlaceholder(decimals));
+      if (baselineCell) baselineCell.setAttribute('data-placeholder', formatPlaceholder(decimals));
+      if (extBaselineCell) extBaselineCell.setAttribute('data-placeholder', formatPlaceholder(decimals));
+      if (openingCell) openingCell.setAttribute('data-placeholder', formatPlaceholder(decimals));
+      if (reserveCell) reserveCell.setAttribute('data-placeholder', formatPlaceholder(decimals));
+
+      // --- Enforce decimal precision limit for numeric fields ---
+      function enforceDecimalLimit(cell) {
+        cell.addEventListener("beforeinput", (e) => {
+          const decimalsCell = tr.querySelector('td[data-field="decimals"]');
+          const decimals = parseInt(decimalsCell?.textContent.trim()) || 2;
+          const text = cell.textContent;
+          const selection = window.getSelection();
+          const cursorPos = selection.anchorOffset;
+          const newText =
+            text.slice(0, cursorPos) + e.data + text.slice(cursorPos);
+          const clean = newText.replace(/[^0-9.]/g, "");
+          const regex = new RegExp(`^(\\d+)(\\.(\\d{0,${decimals}})?)?$`);
+          if (clean && !regex.test(clean)) {
+            e.preventDefault(); // stop extra input but keep caret in place
+          }
+        });
+      }
+      [decrementCell, baselineCell, extBaselineCell, openingCell, reserveCell].forEach(c => {
+        if (c) enforceDecimalLimit(c);
+      });
+      // ---------------------------------------------------------
+
+      // Add event listeners to update ext_baseline when baseline or ext_quantity changes
+      const extQtyCell = tr.querySelector('td[data-field="ext_quantity"]');
+      if (baselineCell) {
+        baselineCell.addEventListener("input", () => {
+          updateExtBaseline(tr);
+        });
+      }
+      if (extQtyCell) {
+        extQtyCell.addEventListener("input", () => {
+          updateExtBaseline(tr);
+        });
+      }
+
+      if (baselineCell) {
+        baselineCell.addEventListener('blur', () => {
+          const decimalsCell = tr.querySelector('td[data-field="decimals"]');
+          const decimals = parseInt(decimalsCell?.textContent.trim()) || 2;
+          let value = baselineCell.textContent.trim().replace(/[^0-9.\-]/g, '');
+          if (value !== '') {
+            baselineCell.textContent = currencySymbol + formatNumericValue(value, decimals);
+            updateExtBaseline(tr);
+          }
+        });
+      }
+
+      if (decrementCell) {
+        decrementCell.addEventListener('blur', () => {
+          const decimalsCell = tr.querySelector('td[data-field="decimals"]');
+          const decimals = parseInt(decimalsCell?.textContent.trim()) || 2;
+          let value = decrementCell.textContent.trim().replace(/[^0-9.\-]/g, '');
+          if (value !== '') {
+            decrementCell.textContent = currencySymbol + formatNumericValue(value, decimals);
+          }
+        });
+      }
+
+      if (extBaselineCell) {
+        extBaselineCell.addEventListener('blur', () => {
+          const decimalsCell = tr.querySelector('td[data-field="decimals"]');
+          const decimals = parseInt(decimalsCell?.textContent.trim()) || 2;
+          let value = extBaselineCell.textContent.trim().replace(/[^0-9.\-]/g, '');
+          if (value !== '') {
+            extBaselineCell.textContent = currencySymbol + formatNumericValue(value, decimals);
+          }
+        });
+      }
+
+      if (openingCell) {
+        openingCell.addEventListener('blur', () => {
+          const decimalsCell = tr.querySelector('td[data-field="decimals"]');
+          const decimals = parseInt(decimalsCell?.textContent.trim()) || 2;
+          let value = openingCell.textContent.trim().replace(/[^0-9.\-]/g, '');
+          if (value !== '') {
+            openingCell.textContent = currencySymbol + formatNumericValue(value, decimals);
+          }
+        });
+      }
+
+      if (reserveCell) {
+        reserveCell.addEventListener('blur', () => {
+          const decimalsCell = tr.querySelector('td[data-field="decimals"]');
+          const decimals = parseInt(decimalsCell?.textContent.trim()) || 2;
+          let value = reserveCell.textContent.trim().replace(/[^0-9.\-]/g, '');
+          if (value !== '') {
+            reserveCell.textContent = currencySymbol + formatNumericValue(value, decimals);
+          }
+        });
+      }
+
+      // Update ext_baseline initially
+      updateExtBaseline(tr);
 
       const actions = document.createElement("td");
       const delBtn = document.createElement("button");
@@ -152,7 +395,15 @@
       for (const row of rows) {
         const cells = row.querySelectorAll("td[data-field]");
         const payload = {};
-        cells.forEach((cell) => (payload[cell.dataset.field] = cell.textContent.trim()));
+        cells.forEach((cell) => {
+          let value = cell.textContent.trim();
+          // Remove currency symbols and non-numeric characters except digits, minus, and decimal point
+          if (["decrement", "baseline", "ext_baseline", "opening_value", "reserve_value"].includes(cell.dataset.field)) {
+            value = value.replace(/[^0-9.\-]/g, "");
+            if (!isNaN(value) && value !== "") value = parseFloat(value);
+          }
+          payload[cell.dataset.field] = value;
+        });
 
         if (row.dataset.id) {
           // update
@@ -215,8 +466,10 @@
       loadLineItems();
     }
 
-    loadLot();
-    loadLineItems();
+    (async () => {
+      await loadLot();
+      await loadLineItems();
+    })();
   </script>
   <footer>
     <p>Tendersmith © 2025</p>
