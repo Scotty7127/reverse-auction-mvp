@@ -223,6 +223,20 @@
         if (col === "") {
           td.textContent = ""; // empty cell for header alignment
           td.contentEditable = false;
+        } else if (["weighting_visible", "opening_visible", "reserve_visible"].includes(col)) {
+          // Render as checkbox
+          const checkbox = document.createElement("input");
+          checkbox.type = "checkbox";
+          checkbox.checked = !!item[col];
+          checkbox.addEventListener("change", () => {
+            td.dataset.value = checkbox.checked;
+          });
+          td.appendChild(checkbox);
+          td.contentEditable = false;
+          td.dataset.field = col;
+          td.dataset.value = checkbox.checked;
+          tr.appendChild(td);
+          return;
         } else {
           td.contentEditable = true;
           td.dataset.field = col;
@@ -396,11 +410,16 @@
         const cells = row.querySelectorAll("td[data-field]");
         const payload = {};
         cells.forEach((cell) => {
-          let value = cell.textContent.trim();
-          // Remove currency symbols and non-numeric characters except digits, minus, and decimal point
-          if (["decrement", "baseline", "ext_baseline", "opening_value", "reserve_value"].includes(cell.dataset.field)) {
-            value = value.replace(/[^0-9.\-]/g, "");
-            if (!isNaN(value) && value !== "") value = parseFloat(value);
+          let value;
+          if (["weighting_visible", "opening_visible", "reserve_visible"].includes(cell.dataset.field)) {
+            value = cell.dataset.value === "true";
+          } else {
+            value = cell.textContent.trim();
+            // Remove currency symbols and non-numeric characters except digits, minus, and decimal point
+            if (["decrement", "baseline", "ext_baseline", "opening_value", "reserve_value"].includes(cell.dataset.field)) {
+              value = value.replace(/[^0-9.\-]/g, "");
+              if (!isNaN(value) && value !== "") value = parseFloat(value);
+            }
           }
           payload[cell.dataset.field] = value;
         });
