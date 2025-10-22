@@ -80,6 +80,25 @@
     const eventId = params.get("event_id");
     const userId = params.get("user_id");
     let lineItems = [];
+    // Global variable for event currency symbol
+    let eventCurrencySymbol = '£';
+
+    // Load event currency symbol
+    async function loadEventCurrency() {
+      try {
+        const res = await authFetch(`/events/${eventId}`);
+        const event = await res.json();
+        const currencyCode = (event.currency || '').toUpperCase();
+        const currencySymbols = {
+          GBP: '£', USD: '$', EUR: '€', CAD: '$', AUD: '$', NZD: '$',
+          CHF: 'CHF', JPY: '¥', CNY: '¥', INR: '₹', SEK: 'kr',
+          NOK: 'kr', DKK: 'kr', PLN: 'zł', ZAR: 'R'
+        };
+        eventCurrencySymbol = currencySymbols[currencyCode] || '£';
+      } catch (err) {
+        eventCurrencySymbol = '£';
+      }
+    }
 
     // Load bidder info and display name/email
     async function loadBidderInfo() {
@@ -100,7 +119,7 @@
       }
     }
 
-    // Load line items and show assigned checkboxes
+    // Load line items and show assigned checkboxes and prefill weighting and opening bid
     async function loadLineItems() {
       try {
         const res = await authFetch(`/events/${eventId}/bidders/${userId}/line-items`);
@@ -110,6 +129,21 @@
           document.getElementById("line-items-container").innerHTML = "<p>No line items found for this event.</p>";
           return;
         }
+
+        // Fetch supplier-settings for each line item and store in a map keyed by item id
+        const supplierSettingsMap = {};
+        await Promise.all(lineItems.map(async (item) => {
+          try {
+            const resSettings = await authFetch(`/events/${eventId}/line-items/${item.id}/supplier-settings`);
+            const settingsList = await resSettings.json();
+            const supplierSetting = settingsList.find(s => s.supplier_id == userId);
+            if (supplierSetting) {
+              supplierSettingsMap[item.id] = supplierSetting;
+            }
+          } catch (err) {
+            console.warn(`Error loading supplier settings for line item ${item.id}:`, err);
+          }
+        }));
 
         let html = `
         <div style="overflow-x:auto;">
@@ -121,6 +155,8 @@
                 <th>Item Name</th>
                 <th>Description</th>
                 <th>Quantity</th>
+                <th>Weighting (%)</th>
+                <th>Opening Bid (${eventCurrencySymbol})</th>
                 <th>Assigned (Yes/No)</th>
               </tr>
             </thead>
@@ -128,6 +164,8 @@
         `;
 
         lineItems.forEach(item => {
+          const weighting = supplierSettingsMap[item.id]?.weighting != null ? (supplierSettingsMap[item.id].weighting * 100) : '';
+          const openingBid = supplierSettingsMap[item.id]?.opening_bid ?? '';
           html += `
             <tr>
               <td>${item.lot_title || '-'}</td>
@@ -135,6 +173,15 @@
               <td>${item.item_name || '-'}</td>
               <td>${item.description || '-'}</td>
               <td>${item.quantity || '-'}</td>
+              <td>
+                <div class="input-group" style="max-width: 120px;">
+                  <input type="number" step="0.01" class="form-control form-control-sm weighting-input" data-id="${item.id}" placeholder="100" value="${weighting}">
+                  <span class="input-group-text">%</span>
+                </div>
+              </td>
+              <td>
+                <input type="number" step="0.01" class="form-control form-control-sm opening-bid-input" data-id="${item.id}" placeholder="0.00" style="width:100px;" value="${openingBid}">
+              </td>
               <td style="text-align:center;">
                 <input type="checkbox" class="assign-checkbox" data-id="${item.id}" ${item.assigned ? 'checked' : ''}>
               </td>
@@ -150,7 +197,7 @@
       }
     }
 
-    // Save assignments
+    // Save assignments and supplier settings
     async function saveAssignments() {
       const checkedIds = Array.from(document.querySelectorAll(".assign-checkbox:checked")).map(cb => parseInt(cb.dataset.id));
       try {
@@ -159,6 +206,37 @@
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ assignedItemIds: checkedIds })
         });
+
+        // For each checked line item, send supplier-settings for weighting and opening bid
+        for (const id of checkedIds) {
+          const weightingInput = document.querySelector(`.weighting-input[data-id="${id}"]`);
+          const openingBidInput = document.querySelector(`.opening-bid-input[data-id="${id}"]`);
+          let weighting = weightingInput ? parseFloat(weightingInput.value) : null;
+          const openingBid = openingBidInput ? parseFloat(openingBidInput.value) : null;
+
+          if (weighting !== null && !isNaN(weighting)) {
+            weighting = weighting / 100;
+          }
+
+          // Prepare body with weighting and opening bid; only send if values are numbers
+          const bodyData = {};
+          if (!isNaN(weighting) && weighting !== null) bodyData.weighting = weighting;
+          if (!isNaN(openingBid) && openingBid !== null) bodyData.opening_bid = openingBid;
+
+          try {
+            await authFetch(`/events/${eventId}/line-items/${id}/supplier-settings`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                supplier_id: userId,
+                ...bodyData
+              })
+            });
+          } catch (err) {
+            console.error(`Error saving supplier settings for line item ${id}:`, err);
+          }
+        }
+
         alert("✅ Assignments saved successfully.");
         window.location.href = `event.html?id=${eventId}&tab=members`;
       } catch (err) {
@@ -210,6 +288,7 @@
     // Initialize
     (async () => {
       await loadBidderInfo();
+      await loadEventCurrency();
       await loadLineItems();
     })();
 

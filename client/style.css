@@ -146,6 +146,18 @@ input:focus, select:focus, textarea:focus {
   box-shadow: 0 0 0 0.2rem rgba(13,110,253,0.25);
 }
 
+/* Remove number input arrows globally for a cleaner look */
+input[type=number]::-webkit-inner-spin-button,
+input[type=number]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+input[type=number] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
 /* === Footer === */
 footer {
   text-align: center;

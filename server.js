@@ -256,6 +256,21 @@ async function runMigrations() {
     await pool.query(`ALTER TABLE bids ADD COLUMN IF NOT EXISTS event_id INTEGER REFERENCES events(id) ON DELETE CASCADE;`);
     await pool.query(`ALTER TABLE bids ADD COLUMN IF NOT EXISTS line_item_id INTEGER REFERENCES line_items(id) ON DELETE CASCADE;`);
     await pool.query(`ALTER TABLE bids ADD COLUMN IF NOT EXISTS user_id INTEGER REFERENCES users(id) ON DELETE CASCADE;`);
+
+    // === Create supplier_line_item_settings table ===
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS supplier_line_item_settings (
+        id SERIAL PRIMARY KEY,
+        event_id INTEGER REFERENCES events(id) ON DELETE CASCADE,
+        line_item_id INTEGER REFERENCES line_items(id) ON DELETE CASCADE,
+        supplier_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        weighting NUMERIC DEFAULT 1.0,
+        opening_bid NUMERIC,
+        effective_bid NUMERIC GENERATED ALWAYS AS (opening_bid * weighting) STORED,
+        created_at TIMESTAMP DEFAULT NOW(),
+        UNIQUE (event_id, line_item_id, supplier_id)
+      );
+    `);
     console.log("✅ Startup migrations complete.");
   } catch (err) {
     console.error("❌ Migration error:", err.message);
@@ -1221,6 +1236,69 @@ app.put("/line-items/:id", async (req, res) => {
 
 // Delete a line item by ID
 app.delete("/line-items/:id", async (req, res) => {
+// === Supplier Line Item Settings ===
+
+// POST /events/:eventId/line-items/:lineItemId/supplier-settings
+app.post("/events/:eventId/line-items/:lineItemId/supplier-settings", ensureAuthenticated, async (req, res) => {
+  try {
+    const { eventId, lineItemId } = req.params;
+    const { supplier_id, weighting, opening_bid } = req.body;
+    if (!supplier_id) {
+      return res.status(400).json({ error: "supplier_id is required" });
+    }
+    // weighting and opening_bid can be null, but if present, must be numbers
+    let w = weighting;
+    let ob = opening_bid;
+    if (w !== undefined && w !== null && w !== "") {
+      if (isNaN(Number(w))) return res.status(400).json({ error: "weighting must be a number" });
+      w = Number(w);
+    } else {
+      w = 1.0;
+    }
+    if (ob !== undefined && ob !== null && ob !== "") {
+      if (isNaN(Number(ob))) return res.status(400).json({ error: "opening_bid must be a number" });
+      ob = Number(ob);
+    } else {
+      ob = null;
+    }
+    // Upsert (insert or update) the supplier_line_item_settings row
+    const result = await pool.query(
+      `
+      INSERT INTO supplier_line_item_settings (event_id, line_item_id, supplier_id, weighting, opening_bid)
+      VALUES ($1, $2, $3, $4, $5)
+      ON CONFLICT (event_id, line_item_id, supplier_id)
+      DO UPDATE SET weighting=EXCLUDED.weighting, opening_bid=EXCLUDED.opening_bid
+      RETURNING *;
+      `,
+      [eventId, lineItemId, supplier_id, w, ob]
+    );
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error("Error upserting supplier_line_item_settings:", err);
+    res.status(500).json({ error: "Failed to upsert supplier settings" });
+  }
+});
+
+// GET /events/:eventId/line-items/:lineItemId/supplier-settings
+app.get("/events/:eventId/line-items/:lineItemId/supplier-settings", ensureAuthenticated, async (req, res) => {
+  try {
+    const { eventId, lineItemId } = req.params;
+    const result = await pool.query(
+      `
+      SELECT s.*, u.first_name, u.last_name, u.email
+      FROM supplier_line_item_settings s
+      JOIN users u ON s.supplier_id = u.id
+      WHERE s.event_id = $1 AND s.line_item_id = $2
+      ORDER BY u.first_name ASC
+      `,
+      [eventId, lineItemId]
+    );
+    res.json(result.rows);
+  } catch (err) {
+    console.error("Error fetching supplier_line_item_settings:", err);
+    res.status(500).json({ error: "Failed to fetch supplier settings" });
+  }
+});
   try {
     const result = await pool.query(
       "DELETE FROM line_items WHERE id = $1 RETURNING *",
