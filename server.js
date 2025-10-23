@@ -2,7 +2,7 @@ require("dotenv").config();
 const express = require("express");
 const http = require("http");
 const { Server } = require("socket.io");
-const { Pool } = require("pg");
+const pool = require("./db/pool");
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 const cors = require("cors");
@@ -47,17 +47,7 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage });
 
-// ---- Database connection ----
-const isProduction = process.env.NODE_ENV === "production";
 
-const pool = new Pool({
-  connectionString: isProduction
-    ? process.env.DATABASE_URL         // Use Neon when in production
-    : process.env.LOCAL_DATABASE_URL,  // Use local DB when testing locally
-  ssl: isProduction ? { rejectUnauthorized: false } : false,
-});
-
-console.log(isProduction ? "🌐 Running in production (Render/Neon)" : "💻 Running locally (localhost Postgres)");
 
 // ---- Migrations: run automatically on startup ----
 async function runMigrations() {
@@ -1854,7 +1844,7 @@ io.on("connection", (socket) => {
 // ---- Start server ----
 server.listen(4000, () => {
   const url = "http://localhost:4000/start.html";
-  if (!isProduction) {
+  if (process.env.NODE_ENV !== "production") {
     console.log(`✅ Local server running on ${url}`);
     open(url).catch(err => console.error("Could not open browser:", err));
   } else {
