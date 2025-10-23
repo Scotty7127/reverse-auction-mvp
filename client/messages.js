@@ -1,3 +1,5 @@
+const jwt = require("jsonwebtoken");
+
 // === Inject chat panel HTML once and wire up navbar toggle ===
 (function ensureChatUI() {
   if (!document.getElementById('chat-panel')) {
