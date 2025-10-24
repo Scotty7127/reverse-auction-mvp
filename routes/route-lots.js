@@ -189,6 +189,25 @@ module.exports = (pool) => {
 
   // ---- SUPPLIER SETTINGS ----
 
+  // Get all line items for an event
+  router.get("/events/:eventId/line-items", ensureAuthenticated, async (req, res) => {
+    try {
+      const { eventId } = req.params;
+      const result = await pool.query(
+        `SELECT li.*, l.title AS lot_title
+         FROM lots l
+         JOIN line_items li ON li.lot_id = l.id
+         WHERE l.event_id = $1
+         ORDER BY l.id, li.id`,
+        [eventId]
+      );
+      res.json(result.rows);
+    } catch (err) {
+      console.error("Error fetching all event line items:", err);
+      res.status(500).json({ error: "Failed to fetch event line items" });
+    }
+  });
+
   router.post("/events/:eventId/line-items/:lineItemId/supplier-settings", ensureAuthenticated, async (req, res) => {
     try {
       const { eventId, lineItemId } = req.params;

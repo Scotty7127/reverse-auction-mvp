@@ -376,5 +376,23 @@ module.exports = (io) => {
     }
   });
 
+  // === Delete Event ===
+  router.delete("/events/:id", ensureAuthenticated, async (req, res) => {
+    try {
+      const eventId = req.params.id;
+
+      // Only allow managers to delete events
+      if (req.user.role !== "manager") {
+        return res.status(403).json({ error: "Only managers can delete events" });
+      }
+
+      await pool.query("DELETE FROM events WHERE id = $1", [eventId]);
+      res.json({ success: true, message: "Event deleted successfully" });
+    } catch (err) {
+      console.error("Error deleting event:", err);
+      res.status(500).json({ error: "Failed to delete event" });
+    }
+  });
+
   return router;
 };

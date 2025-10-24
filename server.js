@@ -52,6 +52,9 @@ app.use("/", categoryRoutes);
 const adminRoutes = require("./routes/route-admin")(pool);
 app.use("/", adminRoutes);
 
+const userRoutes = require("./routes/route-users")(pool);
+app.use("/", userRoutes);
+
 const staticRoutes = require("./routes/route-static")();
 app.use("/", staticRoutes);
 
