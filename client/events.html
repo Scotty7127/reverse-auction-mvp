@@ -6,7 +6,8 @@
   <title>Events</title>
   <!-- Bootstrap CSS -->
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="css/events.css">
   <script>
     window.requiredRoles = ["manager"];
   </script>
@@ -39,9 +40,23 @@
       <button class="btn btn-primary px-4 py-2" onclick="window.location.href='create-event.html'">Create New Event</button>
     </section>
 
-    <section id="events-list-section">
-      <h3 class="mb-3">Upcoming Events</h3>
-      <div id="events-list"></div>
+    <section id="events-tabs-section">
+      <ul class="nav nav-tabs mb-3" id="eventsTab" role="tablist">
+        <li class="nav-item" role="presentation">
+          <button class="nav-link active" id="upcoming-tab" data-bs-toggle="tab" data-bs-target="#upcoming" type="button" role="tab" aria-controls="upcoming" aria-selected="true">Upcoming Events</button>
+        </li>
+        <li class="nav-item" role="presentation">
+          <button class="nav-link" id="past-tab" data-bs-toggle="tab" data-bs-target="#past" type="button" role="tab" aria-controls="past" aria-selected="false">Past Events</button>
+        </li>
+      </ul>
+      <div class="tab-content" id="eventsTabContent">
+        <div class="tab-pane fade show active" id="upcoming" role="tabpanel" aria-labelledby="upcoming-tab">
+          <div id="events-list"></div>
+        </div>
+        <div class="tab-pane fade" id="past" role="tabpanel" aria-labelledby="past-tab">
+          <div id="past-events-list"></div>
+        </div>
+      </div>
     </section>
   </main>
   <footer>
@@ -50,45 +65,149 @@
 
   <script>
     const eventsList = document.getElementById('events-list');
+    const pastEventsList = document.getElementById('past-events-list');
+
+    function createEventDiv(evt) {
+      const div = document.createElement('div');
+      div.classList.add('event-item');
+      div.innerHTML = `
+        <div class="event-header">
+          <h4 class="org-name">${evt.organisation_name || 'Unnamed Organisation'}</h4>
+          <h5 class="category-name text-muted">${evt.category_name || 'No Category'}</h5>
+          <p class="event-title">${evt.title || 'Untitled Event'}</p>
+        </div>
+        <div class="event-meta">
+          <p class="event-time"><strong>Start:</strong> ${evt.auction_time ? new Date(evt.auction_time).toLocaleString() : 'TBA'}</p>
+          <p class="event-status"><strong>Status:</strong> ${evt.type === 'sealed' ? 'Sealed' : 'Open'}</p>
+          <p class="event-currency"><strong>Currency:</strong> ${evt.currency || '-'}</p>
+        </div>
+      `;
+      div.addEventListener('click', () => {
+        window.location.href = `event.html?id=${evt.id}`;
+      });
+      return div;
+    }
+
+    function createAccordionId(...args) {
+      return args.map(s => s.toString().replace(/\W+/g, '-')).join('-');
+    }
 
     async function loadEvents() {
       try {
         const res = await authFetch('/events');
         const events = await res.json();
 
+        const now = new Date();
+
+        // Separate upcoming and past events
+        const upcomingEvents = [];
+        const pastEvents = [];
+
+        events.forEach(evt => {
+          if (evt.auction_time && new Date(evt.auction_time) < now) {
+            pastEvents.push(evt);
+          } else {
+            upcomingEvents.push(evt);
+          }
+        });
+
+        // Render upcoming events
         eventsList.innerHTML = '';
-        if (events.length === 0) {
+        if (upcomingEvents.length === 0) {
           eventsList.innerHTML = '<p>No events found.</p>';
+        } else {
+          upcomingEvents.forEach(evt => {
+            const div = createEventDiv(evt);
+            eventsList.appendChild(div);
+          });
+        }
+
+        // Render past events grouped by organisation and category using accordions
+        pastEventsList.innerHTML = '';
+        if (pastEvents.length === 0) {
+          pastEventsList.innerHTML = '<p>No past events found.</p>';
           return;
         }
 
-        events.forEach(evt => {
-          const div = document.createElement('div');
-          div.classList.add('event-item');
-          div.innerHTML = `
-            <div class="event-header">
-              <h4 class="org-name">${evt.organisation_name || 'Unnamed Organisation'}</h4>
-              <h5 class="category-name text-muted">${evt.category_name || 'No Category'}</h5>
-              <p class="event-title">${evt.title || 'Untitled Event'}</p>
-            </div>
-            <div class="event-meta">
-              <p class="event-time"><strong>Start:</strong> ${evt.auction_time ? new Date(evt.auction_time).toLocaleString() : 'TBA'}</p>
-              <p class="event-status"><strong>Status:</strong> ${evt.type === 'sealed' ? 'Sealed' : 'Open'}</p>
-              <p class="event-currency"><strong>Currency:</strong> ${evt.currency || '-'}</p>
+        // Group events by organisation and category
+        const grouped = {};
+        pastEvents.forEach(evt => {
+          const org = evt.organisation_name || 'Unnamed Organisation';
+          const cat = evt.category_name || 'No Category';
+          if (!grouped[org]) grouped[org] = {};
+          if (!grouped[org][cat]) grouped[org][cat] = [];
+          grouped[org][cat].push(evt);
+        });
+
+        const orgAccordionId = 'orgAccordion';
+        const orgAccordion = document.createElement('div');
+        orgAccordion.classList.add('accordion');
+        orgAccordion.id = orgAccordionId;
+
+        Object.entries(grouped).forEach(([org, categories], orgIndex) => {
+          const orgId = createAccordionId('org', orgIndex);
+          const orgHeaderId = `${orgId}-header`;
+          const orgCollapseId = `${orgId}-collapse`;
+
+          const orgItem = document.createElement('div');
+          orgItem.classList.add('accordion-item');
+
+          orgItem.innerHTML = `
+            <h2 class="accordion-header" id="${orgHeaderId}">
+              <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#${orgCollapseId}" aria-expanded="false" aria-controls="${orgCollapseId}">
+                ${org}
+              </button>
+            </h2>
+            <div id="${orgCollapseId}" class="accordion-collapse collapse" aria-labelledby="${orgHeaderId}" data-bs-parent="#${orgAccordionId}">
+              <div class="accordion-body p-0">
+                <div class="accordion" id="${orgId}-catAccordion"></div>
+              </div>
             </div>
           `;
-          div.addEventListener('click', () => {
-            window.location.href = `event.html?id=${evt.id}`;
+
+          orgAccordion.appendChild(orgItem);
+
+          const catAccordion = orgItem.querySelector(`#${orgId}-catAccordion`);
+
+          Object.entries(categories).forEach(([cat, evts], catIndex) => {
+            const catId = createAccordionId(orgId, 'cat', catIndex);
+            const catHeaderId = `${catId}-header`;
+            const catCollapseId = `${catId}-collapse`;
+
+            const catItem = document.createElement('div');
+            catItem.classList.add('accordion-item');
+
+            catItem.innerHTML = `
+              <h2 class="accordion-header" id="${catHeaderId}">
+                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#${catCollapseId}" aria-expanded="false" aria-controls="${catCollapseId}">
+                  ${cat}
+                </button>
+              </h2>
+              <div id="${catCollapseId}" class="accordion-collapse collapse" aria-labelledby="${catHeaderId}" data-bs-parent="#${orgId}-catAccordion">
+                <div class="accordion-body">
+                </div>
+              </div>
+            `;
+
+            catAccordion.appendChild(catItem);
+
+            const catBody = catItem.querySelector('.accordion-body');
+            evts.forEach(evt => {
+              const eventDiv = createEventDiv(evt);
+              catBody.appendChild(eventDiv);
+            });
           });
-          eventsList.appendChild(div);
         });
+
+        pastEventsList.appendChild(orgAccordion);
+
       } catch (err) {
         eventsList.innerHTML = '<p>Error loading events.</p>';
+        pastEventsList.innerHTML = '<p>Error loading events.</p>';
         console.error('Error fetching events:', err);
       }
     }
 loadEvents()
-</script>
 </script>
   <!-- Socket.IO client -->
   <script src="/socket.io/socket.io.js"></script>

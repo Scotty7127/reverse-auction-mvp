@@ -263,321 +263,6 @@ footer {
   }
 }
 
-/* === Event Cards (Professional Layout) === */
-.event-item {
-  border: 1px solid #e0e0e0;
-  border-radius: 8px;
-  padding: 16px 20px;
-  margin-bottom: 1rem;
-  background-color: #fff;
-  transition: box-shadow 0.2s ease, transform 0.1s ease;
-  cursor: pointer;
-}
-
-.event-item:hover {
-  box-shadow: 0 4px 8px rgba(0,0,0,0.08);
-  transform: translateY(-2px);
-}
-
-.event-header h4.org-name {
-  font-size: 1.25rem;
-  font-weight: 600;
-  color: #1e293b;
-  margin: 0;
-}
-
-.event-header h5.category-name {
-  font-size: 1rem;
-  color: #64748b;
-  margin: 2px 0 6px 0;
-}
-
-.event-header .event-title {
-  font-size: 1.1rem;
-  font-weight: 500;
-  color: #0f172a;
-  margin-bottom: 10px;
-}
-
-.event-meta {
-  display: flex;
-  gap: 30px;
-  flex-wrap: wrap;
-  font-size: 0.95rem;
-  color: #334155;
-}
-
-.event-meta p {
-  margin: 0;
-}
-
-.event-time {
-  font-weight: 600;
-  color: #0d6efd;
-}
-.events-page {
-  max-width: 1000px;
-  margin: 0 auto;
-  padding: 40px 20px;
-}
-
-.page-header h2 {
-  font-size: 1.8rem;
-  font-weight: 600;
-  color: #1e293b;
-  margin-bottom: 6px;
-}
-
-.page-header p {
-  color: #64748b;
-  margin-bottom: 0;
-}
-
-#create-event-section .btn {
-  font-size: 1rem;
-  font-weight: 500;
-  border-radius: 6px;
-}
-
-#events-list-section {
-  margin-top: 20px;
-}
-
-#events-list-section h3 {
-  color: #0f172a;
-  font-size: 1.3rem;
-  border-bottom: 2px solid #e2e8f0;
-  padding-bottom: 6px;
-}
-
-/* === Manager Dashboard Sleek Layout === */
-/* === Manager Dashboard Sleek Layout === */
-.dashboard-grid {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: 24px;
-  margin-top: 30px;
-  flex-wrap: nowrap;
-}
-
-.upcoming-events {
-  flex: 1 1 72%;
-}
-
-.quick-actions {
-  flex: 0 0 26%;
-  max-width: 320px;
-  align-self: flex-start;
-}
-
-.upcoming-events, .quick-actions {
-  border-radius: 8px;
-  background: #fff;
-}
-
-/* Updated event-mini-item to be clickable */
-.event-mini-item {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  border-bottom: 1px solid #e5e7eb;
-  padding: 8px 0;
-  font-size: 0.9rem;
-  cursor: pointer;
-  transition: background-color 0.2s ease;
-}
-
-.event-mini-item:hover {
-  background-color: #f1f5f9;
-}
-
-.quick-actions {
-  padding: 12px 14px;
-  max-width: 260px;
-  justify-self: end;
-}
-
-.section-title {
-  font-size: 1.1rem;
-  font-weight: 600;
-  color: #1e293b;
-  margin-bottom: 10px;
-}
-
-/* Compact upcoming event items */
-.event-mini-title {
-  font-weight: 500;
-  color: #0f172a;
-  margin: 0;
-}
-
-.event-mini-time {
-  color: #0d6efd;
-  font-weight: 600;
-  margin: 0;
-  font-size: 0.85rem;
-}
-
-/* Quick Actions */
-.quick-actions .btn {
-  font-size: 0.85rem;
-  padding: 6px 0;
-  border-radius: 4px;
-}
-
-.quick-actions .section-title {
-  font-size: 1rem;
-  margin-bottom: 8px;
-  text-align: center;
-  color: #1e293b;
-}
-
-@media (max-width: 768px) {
-  .dashboard-grid {
-    flex-direction: column;
-  }
-
-  .upcoming-events,
-  .quick-actions {
-    flex: 1 1 100%;
-    max-width: 100%;
-  }
-}
-/* === FIX: Dashboard layout alignment override === */
-.dashboard-grid {
-  display: flex !important;
-  flex-direction: row !important;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: 24px;
-  margin-top: 30px;
-  width: 100%;
-}
-
-.upcoming-events {
-  flex: 1 1 70%;
-  width: 70%;
-  display: block;
-}
-
-.quick-actions {
-  flex: 0 0 28%;
-  width: 28%;
-  max-width: 320px;
-  display: block;
-  align-self: flex-start;
-}
-
-@media (max-width: 768px) {
-  .dashboard-grid {
-    flex-direction: column !important;
-  }
-
-  .upcoming-events,
-  .quick-actions {
-    width: 100% !important;
-  }
-}
-/* === Organisation Detail: Categories form spacing === */
-#category-form {
-  display: flex;
-  gap: 12px;              /* space between inputs and buttons */
-  align-items: center;
-  flex-wrap: wrap;        /* wrap on small screens */
-}
-
-#category-form input[type="text"] {
-  flex: 1 1 240px;        /* grow but keep a sensible min width */
-}
-
-#category-form .btn {
-  margin-left: 0;         /* reset any inherited margins */
-}
-
-/* Make the cancel button not stick to the submit button */
-#cancel-edit.btn {
-  margin-left: 6px;
-}
-/* === Bidder Cards Styling (Professional Layout) === */
-.bidder-card {
-  border: 1px solid #dce3eb;
-  border-radius: 8px;
-  background: #ffffff;
-  padding: 14px 18px;
-  margin-bottom: 12px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
-  transition: box-shadow 0.2s ease, transform 0.1s ease;
-}
-
-.bidder-card:hover {
-  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.08);
-  transform: translateY(-2px);
-}
-
-/* === Bidder Header Layout (Improved) === */
-.bidder-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  margin-bottom: 6px;
-  padding-bottom: 4px;
-  border-bottom: 1px solid #e5e7eb;
-  gap: 10px;
-}
-
-.bidder-org-wrapper {
-  flex: 1;
-  display: flex;
-  align-items: center;
-}
-
-.bidder-org {
-  font-weight: 600;
-  color: #0d6efd;
-  font-size: 1rem;
-  text-decoration: none;
-  word-break: break-word;
-}
-
-.bidder-org:hover {
-  text-decoration: underline;
-  color: #084298;
-}
-
-.checkbox-wrapper {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 30px;
-}
-
-.bidder-assign {
-  transform: scale(1.3);
-  cursor: pointer;
-  margin: 0;
-}
-
-.bidder-info {
-  margin-top: 6px;
-  color: #475569;
-  font-size: 0.9rem;
-  line-height: 1.4;
-}
-
-.bidder-info small {
-  display: block;
-  color: #64748b;
-  font-size: 0.85rem;
-}
-
-/* === Members Tab: Instruction Text === */
-.bidders-instruction {
-  margin-top: -5px;
-  margin-bottom: 10px;
-  font-size: 0.9rem;
-  color: #6c757d;
-}
 
 /* === Slide-Out Chat Panel (Global) === */
 .chat-panel { position: fixed; top: 0; right: -420px; width: 420px; height: 100%; background: #fff; border-left: 1px solid #dce3eb; box-shadow: -2px 0 10px rgba(0,0,0,0.08); transition: right 0.3s ease; display: flex; flex-direction: column; z-index: 1050; }
@@ -588,11 +273,10 @@ footer {
   border-right: 1px solid #e5e7eb;
   display: flex;
   flex-direction: column;
-  width: 56px;                   /* collapsed width */
-  transition: width 0.3s ease;   /* smooth expand */
-  overflow: hidden;               /* hide text when collapsed */
-  white-space: nowrap;
+  width: 56px;                   
+  transition: width 0.3s ease;
   overflow: hidden;
+  white-space: nowrap;
   text-overflow: ellipsis;
 }
 .chat-sidebar:hover { width: 220px; }
@@ -602,6 +286,9 @@ footer {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+
+
+/* Message */
 .chat-sidebar-header { padding: 8px; border-bottom: 1px solid #e5e7eb; }
 .chat-sidebar-header input { width: 100%; padding: 6px 8px; border: 1px solid #cbd5e1; border-radius: 4px; font-size: 0.9rem; }
 .chat-section-title { margin: 8px 8px 4px; font-size: 0.8rem; color: #64748b; text-transform: uppercase; letter-spacing: .03em; }
@@ -610,12 +297,14 @@ footer {
 .chat-list-item:hover { background: #f8fafc; }
 .chat-list-name { font-size: 0.95rem; color: #0f172a; font-weight: 600; }
 .chat-list-sub { font-size: 0.8rem; color: #64748b; }
+
 .chat-main { display: flex; flex-direction: column; height: 100%; }
 .chat-thread-header { padding: 10px 12px; border-bottom: 1px solid #e5e7eb; background: #fafafa; font-weight: 600; color: #0f172a; }
 .chat-messages { flex: 1; overflow-y: auto; padding: 10px 12px; background: #fff; }
 .chat-input { display: flex; gap: 8px; padding: 10px; border-top: 1px solid #e5e7eb; background: #fafafa; }
 .chat-input input { flex: 1; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 0.95rem; }
 .chat-input .btn { padding: 6px 12px; }
+
 .message { max-width: 78%; padding: 8px 12px; border-radius: 10px; word-break: break-word; margin-bottom: 8px; }
 .message.sent { align-self: flex-end; background: #d1e7dd; }
 .message.received { align-self: flex-start; background: #e2e8f0; }
@@ -624,8 +313,6 @@ footer {
 /* === Chat Sidebar Collapse/Expand Details === */
 .chat-all-heading { font-size: 1rem; font-weight: 600; margin: 6px 0; text-align: center; color: #0f172a; }
 
-/* When collapsed, hide extra text and inputs (and any hidden items under the +) */
-/* When collapsed, hide extra text and inputs (and any hidden items under the +) */
 .chat-sidebar:not(:hover) .chat-section-title,
 .chat-sidebar:not(:hover) .chat-list-sub,
 .chat-sidebar:not(:hover) #chat-search,
@@ -633,9 +320,6 @@ footer {
 .chat-sidebar:not(:hover) .chat-list-name,
 .chat-sidebar:not(:hover) .chat-list-item { display: none !important; }
 
-/* (Rule removed: .chat-sidebar:not(:hover) .chat-list-name { ... } - now handled above) */
-
-/* Sidebar "+" and "+ New Chat" toggle (only pseudo-elements, no real text) */
 #new-chat-header::after { content: '+'; display: block; text-align: center; font-size: 1.2rem; font-weight: 700; }
 .chat-sidebar:hover #new-chat-header::after { content: '+ New Chat'; font-size: 1rem; font-weight: 600; }
 
@@ -665,7 +349,7 @@ footer {
 }
 .chat-home-preview {
   font-size: 0.85rem;
-  color: #9ca3af; /* light grey */
+  color: #9ca3af;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -681,5 +365,5 @@ footer {
 .chat-back-btn { background: none; border: none; font-size: 0.9rem; cursor: pointer; color: #0d6efd; margin-right: 8px; }
 .chat-back-btn:hover { text-decoration: underline; }
 
-/* Generic hidden utility (used by thread/home toggle) */
+/* Generic hidden utility */
 .hidden { display: none !important; }
