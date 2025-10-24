@@ -13,40 +13,6 @@
   </script>
   <script src="/config.js"></script>
   <script src="/auth.js"></script>
-  <style>
-    .tabs {
-      display: flex;
-      justify-content: center;
-      background-color: #e2e2e2;
-      padding: 10px;
-      border-bottom: 1px solid #ccc;
-    }
-    .tab {
-      margin: 0 15px;
-      cursor: pointer;
-      font-weight: bold;
-      color: #007bff;
-    }
-    .tab.active {
-      text-decoration: underline;
-    }
-    .tab-content {
-      display: none;
-      padding: 20px;
-    }
-    .tab-content.active {
-      display: block;
-    }
-    .details {
-      text-align: left;
-      max-width: 600px;
-      margin: 20px auto;
-      background: white;
-      padding: 20px;
-      border-radius: 8px;
-      box-shadow: 0 2px 5px rgba(0,0,0,0.1);
-    }
-  </style>
 </head>
 <body>
   <!-- Navbar -->
@@ -64,74 +30,104 @@
     </div>
   </nav>
 
-  <div class="tabs">
+  <div class="event-tabs">
     <div class="tab active" data-tab="overview">Overview</div>
     <div class="tab" data-tab="lots">Lots</div>
     <div class="tab" data-tab="lines">All Line Items</div>
     <div class="tab" data-tab="members">Members</div>
-    <div class="tab" data-tab="docs">Docs</div>
+    <div class="tab" data-tab="docs">RFQ</div>
     <div class="tab" data-tab="pricing">Pricing</div>
   </div>
 
-  <main>
+  <main class="event-detail-page">
+    <div class="event-content">
     <section id="overview" class="tab-content active">
-      <div class="details" id="event-details">
-        <h2>Loading event...</h2>
+      <div class="event-overview-card" id="event-details">
+        <div class="loading-state">Loading event...</div>
       </div>
     </section>
 
     <section id="lots" class="tab-content">
-      <h2>Lots</h2>
-      <button id="create-lot-btn">➕ Create New Lot</button>
-      <div id="lots-list" style="margin-top: 20px;"></div>
+      <div class="section-header">
+        <h2>Lots</h2>
+        <button id="create-lot-btn" class="btn-primary">Create New Lot</button>
+      </div>
+      <div id="lots-list" class="lots-container"></div>
     </section>
 
     <section id="lines" class="tab-content">
       <h2>All Line Items</h2>
-      <p>All Line items from all groups will be listed here</p>
+      <p class="section-description">All line items from all lots will be listed here</p>
     </section>
 
     <section id="members" class="tab-content">
-      <h2>Members</h2>
-      <div class="details">
-        <h4>Managers</h4>
-        <div id="managerList"><p>Loading...</p></div>
-        <hr>
-        <h4>Bidders</h4>
-        <p class="bidders-instruction text-muted">Select a supplier’s name to assign line items, weighting, and opening bids.</p>
-        <div id="bidderList"><p>Loading...</p></div>
+      <h2>Event Members</h2>
+      <div class="members-grid">
+        <div class="members-card">
+          <div class="card-header-custom">
+            <h3 class="card-title">Managers</h3>
+          </div>
+          <div class="card-content">
+            <div id="managerList"><p class="loading-text">Loading...</p></div>
+          </div>
+        </div>
+        <div class="members-card">
+          <div class="card-header-custom">
+            <h3 class="card-title">Bidders</h3>
+          </div>
+          <div class="card-content">
+            <p class="bidders-instruction">Select suppliers to assign line items, weighting, and opening bids.</p>
+            <div id="bidderList"><p class="loading-text">Loading...</p></div>
+          </div>
+        </div>
       </div>
-      <button id="save-members-btn" style="margin-top: 10px; background-color:#007bff;color:white;border:none;padding:10px 15px;border-radius:5px;cursor:pointer;">💾 Save Assignments</button>
+      <div class="section-actions">
+        <button id="save-members-btn" class="btn-primary">Save Assignments</button>
+      </div>
     </section>
 
     <section id="docs" class="tab-content">
       <h2>RFQ Management</h2>
-      <div class="details">
-        <h4>Information / Email Content</h4>
-        <textarea id="rfq-info" rows="6" placeholder="Write the email content that will be sent to bidders..."></textarea>
-        <hr>
-        <h4>Schedule</h4>
-        <div>
-          <label>Publish Date & Time:</label>
-          <input type="datetime-local" id="rfq-publish" />
+      <div class="rfq-card">
+        <div class="card-header-custom">
+          <h4 class="card-title">Information / Email Content</h4>
         </div>
-        <div>
-          <label>Deadline for Responses:</label>
-          <input type="datetime-local" id="rfq-deadline" />
+        <div class="card-content">
+          <textarea id="rfq-info" class="rfq-textarea" rows="6" placeholder="Write the email content that will be sent to bidders..."></textarea>
         </div>
-        <div>
-          <label>Reminder Time (1 day before deadline by default):</label>
-          <input type="datetime-local" id="rfq-reminder" />
+      </div>
+      
+      <div class="rfq-card">
+        <div class="card-header-custom">
+          <h4 class="card-title">Schedule</h4>
         </div>
-        <div>
-          <button id="save-rfq-btn">Save Draft</button>
-          <button id="publish-rfq-btn">Publish Now</button>
+        <div class="card-content">
+          <div class="form-grid">
+            <div class="form-group">
+              <label class="form-label">Publish Date & Time:</label>
+              <input type="datetime-local" id="rfq-publish" class="form-input" />
+            </div>
+            <div class="form-group">
+              <label class="form-label">Deadline for Responses:</label>
+              <input type="datetime-local" id="rfq-deadline" class="form-input" />
+            </div>
+            <div class="form-group">
+              <label class="form-label">Reminder Time:</label>
+              <input type="datetime-local" id="rfq-reminder" class="form-input" />
+              <small class="form-hint">Defaults to 1 day before deadline</small>
+            </div>
+          </div>
+          <div class="rfq-actions">
+            <button id="save-rfq-btn" class="btn-secondary">Save Draft</button>
+            <button id="publish-rfq-btn" class="btn-primary">Publish Now</button>
+          </div>
         </div>
       </div>
       <div id="rfq-status"></div>
     </section>
 
     <!-- Pricing section removed -->
+    </div>
   </main>
 
   <script>
@@ -195,19 +191,36 @@
         }
 
         document.getElementById('event-details').innerHTML = `
-  <div style="display: flex; justify-content: space-between; align-items: start;">
-    <h2>${event.title}</h2>
-    <div style="display: flex; gap: 10px;">
-      <button id="edit-btn" style="background-color:#007bff;color:white;border:none;padding:10px 15px;border-radius:5px;cursor:pointer;">✏️ Edit Event</button>
-      <button id="delete-btn" class="delete-btn">🗑 Delete Event</button>
+  <div class="event-header-section">
+    <div>
+      <h1 class="event-title">${event.title}</h1>
+      <p class="event-description">${event.description || ''}</p>
+    </div>
+    <div class="event-actions">
+      <button id="edit-btn" class="btn-edit">Edit Event</button>
+      <button id="delete-btn" class="btn-delete">Delete Event</button>
     </div>
   </div>
-  <p>${event.description || ''}</p>
-  <p><strong>Organisation:</strong> ${event.organisation_name || '-'}</p>
-  <p><strong>Category:</strong> ${event.category_name || '-'}</p>
-  <p><strong>Currency:</strong> ${event.currency || '-'}</p>
-  <p><strong>Status:</strong> ${event.type === 'sealed' ? 'Event Sealed (Invite Only & Anonymous Bids)' : 'Event Open (Public Bidding)'}</p>
-  <p><strong>Auction Start:</strong> ${
+  <div class="event-details-grid">
+    <div class="detail-row">
+      <span class="detail-label">Organisation:</span>
+      <span class="detail-value">${event.organisation_name || '-'}</span>
+    </div>
+    <div class="detail-row">
+      <span class="detail-label">Category:</span>
+      <span class="detail-value">${event.category_name || '-'}</span>
+    </div>
+    <div class="detail-row">
+      <span class="detail-label">Currency:</span>
+      <span class="detail-value">${event.currency || '-'}</span>
+    </div>
+    <div class="detail-row">
+      <span class="detail-label">Status:</span>
+      <span class="detail-value">${event.type === 'sealed' ? 'Sealed (Invite Only & Anonymous)' : 'Open (Public Bidding)'}</span>
+    </div>
+    <div class="detail-row">
+      <span class="detail-label">Auction Start:</span>
+      <span class="detail-value">${
     event.auction_time
       ? new Date(event.auction_time).toLocaleString(undefined, {
           year: 'numeric',
@@ -219,13 +232,30 @@
           timeZoneName: 'short'
         })
       : '-'
-  }</p>
-  <p><strong>Support Contact:</strong> ${event.support_contact || '-'}</p>
-  <p><strong>Bid Manager:</strong> ${event.bid_manager || '-'}</p>
-  <p><strong>Auction Duration:</strong> ${event.auction_duration ? event.auction_duration + ' minutes' : '-'}</p>
-  <p><strong>Extension Time:</strong> ${event.extension_time ? event.extension_time + ' seconds' : '-'}</p>
-  <p><strong>Extension Threshold:</strong> ${event.extension_threshold ? event.extension_threshold + ' seconds' : '-'}</p>
-  <small>Created at: ${new Date(event.created_at).toLocaleString()}</small>
+  }</span>
+    </div>
+    <div class="detail-row">
+      <span class="detail-label">Support Contact:</span>
+      <span class="detail-value">${event.support_contact || '-'}</span>
+    </div>
+    <div class="detail-row">
+      <span class="detail-label">Bid Manager:</span>
+      <span class="detail-value">${event.bid_manager || '-'}</span>
+    </div>
+    <div class="detail-row">
+      <span class="detail-label">Auction Duration:</span>
+      <span class="detail-value">${event.auction_duration ? event.auction_duration + ' minutes' : '-'}</span>
+    </div>
+    <div class="detail-row">
+      <span class="detail-label">Extension Time:</span>
+      <span class="detail-value">${event.extension_time ? event.extension_time + ' seconds' : '-'}</span>
+    </div>
+    <div class="detail-row">
+      <span class="detail-label">Extension Threshold:</span>
+      <span class="detail-value">${event.extension_threshold ? event.extension_threshold + ' seconds' : '-'}</span>
+    </div>
+  </div>
+  <div class="event-meta">Created: ${new Date(event.created_at).toLocaleString()}</div>
 `;
 
         const deleteBtn = document.getElementById('delete-btn');
@@ -263,21 +293,18 @@
         const list = document.getElementById('lots-list');
         list.innerHTML = '';
         if (lots.length === 0) {
-          list.innerHTML = '<p>No lots yet.</p>';
+          list.innerHTML = '<p class="loading-text">No lots yet.</p>';
         } else {
           lots.forEach(lot => {
             const div = document.createElement('div');
-            div.style.border = '1px solid #ccc';
-            div.style.padding = '10px';
-            div.style.margin = '10px 0';
-            div.style.borderRadius = '6px';
+            div.className = 'lot-card';
             div.innerHTML = `
-              <div style="display: flex; justify-content: space-between; align-items: center;">
+              <div class="lot-header">
                 <div>
-                  <h3 style="cursor:pointer;color:#007bff;text-decoration:underline;" onclick="window.location.href='lot.html?id=${lot.id}'">${lot.title}</h3>
-                  <p>${lot.description || ''}</p>
+                  <h3 class="lot-title" onclick="window.location.href='lot.html?id=${lot.id}'">${lot.title}</h3>
+                  <p class="lot-description">${lot.description || ''}</p>
                 </div>
-                <button onclick="window.location.href='create-lot.html?event_id=${eventId}&lot_id=${lot.id}'" style="background-color:#007bff;color:white;border:none;padding:6px 10px;border-radius:4px;cursor:pointer;">✏️ Edit</button>
+                <button onclick="window.location.href='create-lot.html?event_id=${eventId}&lot_id=${lot.id}'" class="btn-edit">Edit</button>
               </div>
             `;
             list.appendChild(div);
@@ -476,11 +503,12 @@
           const isCreator = u.id === event.created_by;
           const checked = assignedManagerIds.has(u.id) || isCreator;
           const row = document.createElement("div");
+          row.className = "member-item";
           row.innerHTML = `
-            <div>
+            <div class="member-info">
               <strong>${(u.first_name || "")} ${(u.last_name || "")}${isCreator ? " (Creator)" : ""}</strong>
             </div>
-            <input type="checkbox" class="manager-assign" data-user-id="${u.id}" ${checked ? "checked" : ""} ${isCreator ? "disabled" : ""}/>
+            <input type="checkbox" class="manager-assign member-checkbox" data-user-id="${u.id}" ${checked ? "checked" : ""} ${isCreator ? "disabled" : ""}/>
           `;
           managerList.appendChild(row);
         });
@@ -505,7 +533,7 @@
                 </a>
               </div>
               <div class="checkbox-wrapper">
-                <input type="checkbox" class="bidder-assign" data-user-id="${u.id}" ${checked ? "checked" : ""} />
+                <input type="checkbox" class="bidder-assign member-checkbox" data-user-id="${u.id}" ${checked ? "checked" : ""} />
               </div>
             </div>
             <div class="bidder-info">
@@ -567,7 +595,7 @@
         for (const user_id of toRemoveManagers)
           await authFetch(`/events/${eventId}/members/${user_id}`, { method: "DELETE" });
 
-        alert("✅ Member assignments saved.");
+        alert("Member assignments saved successfully.");
         await loadUsersAndMembers(eventId);
       } catch (e) {
         console.error("Error saving assignments:", e);
