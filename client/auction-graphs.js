@@ -44,7 +44,7 @@ function initChart(canvasId, baselineValue = null, currencySymbol = '£') {
           beginAtZero: false,
           suggestedMin: baselineValue ? baselineValue * 0.9 : null,
           suggestedMax: baselineValue ? baselineValue * 1.1 : null,
-          title: { display: true, text: 'Total Auction Price' },
+          title: { display: true, text: 'Total Price' },
           ticks: {
             callback: v => currencySymbol ? `${currencySymbol}${v.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}` : v
           }
