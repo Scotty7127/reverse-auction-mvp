@@ -34,29 +34,38 @@
   </nav>
 
   <!-- Main Content -->
-  <main class="container mt-4">
+  <main class="manager-page">
     <section class="dashboard">
-      <h1>Manager Dashboard</h1>
-      <h2 id="welcome">Welcome!</h2>
-      <p>This is your manager dashboard.</p>
+      <div class="page-header text-center mb-4">
+        <h1>Manager Dashboard</h1>
+        <h2 id="welcome" class="welcome-text">Welcome!</h2>
+      </div>
 
       <div class="dashboard-grid">
         <!-- Upcoming Events -->
-        <div class="upcoming-events card shadow-sm">
-          <div class="card-body">
-            <h3 class="section-title">Your Upcoming Events</h3>
+        <div class="upcoming-events-card">
+          <div class="card-header-custom">
+            <h3 class="card-title">Your Upcoming Events</h3>
+          </div>
+          <div class="card-content">
             <div id="upcoming-events">
-              <p class="text-muted small">Loading your events...</p>
+              <p class="loading-text">Loading your events...</p>
             </div>
           </div>
         </div>
 
         <!-- Quick Actions -->
-        <div class="quick-actions card shadow-sm">
-          <div class="card-body">
-            <h4 class="section-title">Quick Actions</h4>
-            <button class="btn btn-primary btn-sm w-100 mb-2" onclick="window.location.href='create-event.html'">Create Event</button>
-            <button class="btn btn-secondary btn-sm w-100" onclick="window.location.href='account.html'">Invite User</button>
+        <div class="quick-actions-card">
+          <div class="card-header-custom">
+            <h4 class="card-title">Quick Actions</h4>
+          </div>
+          <div class="card-content">
+            <button class="btn-action-primary" onclick="window.location.href='create-event.html'">
+              <span class="btn-icon">+</span> Create Event
+            </button>
+            <button class="btn-action-secondary" onclick="window.location.href='account.html'">
+              <span class="btn-icon">👤</span> Invite User
+            </button>
           </div>
         </div>
       </div>
@@ -98,12 +107,18 @@
           return;
         }
 
-        container.innerHTML = relevantEvents.map(evt => `
-          <div class="event-mini-item" onclick="window.location.href='event.html?id=${evt.id}'">
-            <p class="event-mini-title">${evt.title}</p>
-            <p class="event-mini-time">${evt.auction_time ? new Date(evt.auction_time).toLocaleString() : 'TBA'}</p>
-          </div>
-        `).join('');
+        container.innerHTML = relevantEvents.map(evt => {
+          const orgName = evt.organisation_name || 'Unnamed Organisation';
+          const catName = evt.category_name || 'No Category';
+          const displayTitle = `${orgName} - ${catName}`;
+          
+          return `
+            <div class="event-mini-item" onclick="window.location.href='event.html?id=${evt.id}'">
+              <p class="event-mini-title">${displayTitle}</p>
+              <p class="event-mini-time">${evt.auction_time ? new Date(evt.auction_time).toLocaleString() : 'TBA'}</p>
+            </div>
+          `;
+        }).join('');
       } catch (err) {
         console.error('Failed to load events:', err);
         document.getElementById('upcoming-events').innerHTML = '<p class="text-danger">Failed to load events.</p>';

@@ -29,11 +29,17 @@
       </ul>
     </div>
   </nav>
-  <main>
-    <h2>Manage Organisations</h2>
-    <div class="actions mb-3">
-      <button onclick="window.location.href='orgdetail.html'">➕ Add Organisation</button>
+  <main class="org-page">
+    <div class="page-header-org text-center mb-4">
+      <h2>Manage Organisations</h2>
+      <p>Manage your clients, agencies, and suppliers.</p>
     </div>
+
+    <section class="text-center mb-5">
+      <button class="btn-add-org" onclick="window.location.href='orgdetail.html'">
+        <span class="btn-icon">+</span> Add Organisation
+      </button>
+    </section>
 
     <ul class="nav nav-tabs" id="orgTabs" role="tablist">
       <li class="nav-item"><button class="nav-link active" id="clients-tab" data-bs-toggle="tab" data-bs-target="#clients" type="button" role="tab">Clients</button></li>
@@ -42,13 +48,43 @@
     </ul>
     <div class="tab-content">
       <div class="tab-pane fade show active" id="clients" role="tabpanel">
-        <table id="clients-table" class="line-items-table"><thead><tr><th>Organisation Name</th><th>Actions</th></tr></thead><tbody></tbody></table>
+        <div class="table-container">
+          <table id="clients-table" class="org-table">
+            <thead>
+              <tr>
+                <th>Organisation Name</th>
+                <th class="actions-col">Actions</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
       </div>
       <div class="tab-pane fade" id="agencies" role="tabpanel">
-        <table id="agencies-table" class="line-items-table"><thead><tr><th>Organisation Name</th><th>Actions</th></tr></thead><tbody></tbody></table>
+        <div class="table-container">
+          <table id="agencies-table" class="org-table">
+            <thead>
+              <tr>
+                <th>Organisation Name</th>
+                <th class="actions-col">Actions</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
       </div>
       <div class="tab-pane fade" id="suppliers" role="tabpanel">
-        <table id="suppliers-table" class="line-items-table"><thead><tr><th>Organisation Name</th><th>Actions</th></tr></thead><tbody></tbody></table>
+        <div class="table-container">
+          <table id="suppliers-table" class="org-table">
+            <thead>
+              <tr>
+                <th>Organisation Name</th>
+                <th class="actions-col">Actions</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
       </div>
     </div>
 
@@ -58,20 +94,39 @@
         const orgs = await res.json();
         const tbody = document.querySelector(`#${tableId} tbody`);
         tbody.innerHTML = "";
+        
+        if (orgs.length === 0) {
+          const tr = document.createElement("tr");
+          tr.className = "empty-row";
+          const td = document.createElement("td");
+          td.colSpan = 2;
+          td.textContent = "No organisations found";
+          tr.appendChild(td);
+          tbody.appendChild(tr);
+          return;
+        }
+        
         orgs.forEach(org => {
           const tr = document.createElement("tr");
+          
           const nameTd = document.createElement("td");
           nameTd.textContent = org.name;
           tr.appendChild(nameTd);
+          
           const actionsTd = document.createElement("td");
+          actionsTd.className = "actions-cell";
+          
           const editBtn = document.createElement("button");
-          editBtn.textContent = "✏️";
+          editBtn.className = "btn-action btn-edit";
+          editBtn.setAttribute("aria-label", `Edit ${org.name}`);
+          editBtn.innerHTML = '<span>Edit</span>';
           editBtn.onclick = () => window.location.href = `orgdetail.html?id=${org.id}`;
           actionsTd.appendChild(editBtn);
-          // Add delete button
+          
           const deleteBtn = document.createElement("button");
-          deleteBtn.textContent = "🗑️";
-          deleteBtn.style.marginLeft = "8px";
+          deleteBtn.className = "btn-action btn-delete";
+          deleteBtn.setAttribute("aria-label", `Delete ${org.name}`);
+          deleteBtn.innerHTML = '<span>Delete</span>';
           deleteBtn.onclick = async () => {
             if (confirm(`Delete organisation "${org.name}"?`)) {
               const res = await authFetch(`/organisations/${org.id}`, { method: 'DELETE' });
@@ -83,6 +138,7 @@
             }
           };
           actionsTd.appendChild(deleteBtn);
+          
           tr.appendChild(actionsTd);
           tbody.appendChild(tr);
         });

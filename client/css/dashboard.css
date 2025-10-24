@@ -1,129 +1,235 @@
-/* === Manager Dashboard Sleek Layout === */
+/* === Manager Dashboard (Enterprise Professional Design) === */
+:root {
+  --accent: #2563eb;
+  --text-dark: #1e293b;
+  --text-muted: #64748b;
+  --border: #e2e8f0;
+  --hover: #f8fafc;
+}
+
+.manager-page {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 32px 24px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica', 'Arial', sans-serif;
+  color: var(--text-dark);
+  background: #ffffff;
+}
+
+/* === Professional Page Header === */
+.page-header {
+  text-align: center;
+  margin-bottom: 32px;
+}
+
+.page-header h1 {
+  font-size: 1.75rem;
+  font-weight: 600;
+  color: var(--text-dark);
+  margin: 0 0 8px 0;
+  letter-spacing: -0.025em;
+}
+
+.welcome-text {
+  color: var(--text-muted);
+  font-size: 1.125rem;
+  font-weight: 500;
+  margin: 0;
+}
+
+/* === Dashboard Grid Layout === */
 .dashboard-grid {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
+  display: grid;
+  grid-template-columns: 1fr 320px;
   gap: 24px;
-  margin-top: 30px;
-  flex-wrap: nowrap;
+  align-items: start;
 }
 
-.upcoming-events {
-  flex: 1 1 72%;
-}
-
-.quick-actions {
-  flex: 0 0 26%;
-  max-width: 320px;
-  align-self: flex-start;
-}
-
-.upcoming-events, .quick-actions {
+/* === Professional Card Containers === */
+.upcoming-events-card,
+.quick-actions-card {
+  background: #ffffff;
+  border: 1px solid var(--border);
   border-radius: 8px;
-  background: #fff;
+  overflow: hidden;
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
 }
 
-/* Updated event-mini-item to be clickable */
+.card-header-custom {
+  background: #f8fafc;
+  border-bottom: 1px solid var(--border);
+  padding: 16px 20px;
+}
+
+.card-title {
+  font-size: 1.0625rem;
+  font-weight: 600;
+  color: var(--text-dark);
+  margin: 0;
+  letter-spacing: -0.01em;
+}
+
+.card-content {
+  padding: 20px;
+}
+
+/* === Upcoming Events List === */
+#upcoming-events {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
 .event-mini-item {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  border-bottom: 1px solid #e5e7eb;
-  padding: 8px 0;
-  font-size: 0.9rem;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border);
   cursor: pointer;
-  transition: background-color 0.2s ease;
+  transition: background-color 0.15s ease;
+}
+
+.event-mini-item:last-child {
+  border-bottom: none;
 }
 
 .event-mini-item:hover {
-  background-color: #f1f5f9;
+  background-color: #f9fafb;
 }
 
-.quick-actions {
-  padding: 12px 14px;
-  max-width: 260px;
-  justify-self: end;
-}
-
-.section-title {
-  font-size: 1.1rem;
-  font-weight: 600;
-  color: #1e293b;
-  margin-bottom: 10px;
-}
-
-/* Compact upcoming event items */
 .event-mini-title {
+  font-size: 0.9375rem;
   font-weight: 500;
-  color: #0f172a;
+  color: var(--text-dark);
   margin: 0;
+  flex: 1;
 }
 
 .event-mini-time {
-  color: #0d6efd;
-  font-weight: 600;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--accent);
   margin: 0;
-  font-size: 0.85rem;
+  white-space: nowrap;
+  margin-left: 16px;
 }
 
-/* Quick Actions */
-.quick-actions .btn {
-  font-size: 0.85rem;
-  padding: 6px 0;
-  border-radius: 4px;
-}
-
-.quick-actions .section-title {
-  font-size: 1rem;
-  margin-bottom: 8px;
+.loading-text {
   text-align: center;
-  color: #1e293b;
+  color: var(--text-muted);
+  font-size: 0.9375rem;
+  margin: 20px 0;
 }
 
-@media (max-width: 768px) {
-  .dashboard-grid {
-    flex-direction: column;
-  }
+#upcoming-events p.text-muted {
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 0.9375rem;
+  margin: 20px 0;
+}
 
-  .upcoming-events,
-  .quick-actions {
-    flex: 1 1 100%;
+#upcoming-events p.text-danger {
+  text-align: center;
+  color: #dc2626;
+  font-size: 0.9375rem;
+  margin: 20px 0;
+}
+
+/* === Quick Actions Card === */
+.quick-actions-card .card-content {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.btn-action-primary,
+.btn-action-secondary {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  padding: 12px 20px;
+  font-size: 0.9375rem;
+  font-weight: 500;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+}
+
+.btn-action-primary {
+  background: var(--accent);
+  color: #ffffff;
+}
+
+.btn-action-primary:hover {
+  background: #1d4ed8;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+}
+
+.btn-action-primary:active {
+  background: #1e40af;
+}
+
+.btn-action-secondary {
+  background: #f3f4f6;
+  color: var(--text-dark);
+  border: 1px solid var(--border);
+}
+
+.btn-action-secondary:hover {
+  background: #e5e7eb;
+  border-color: #cbd5e1;
+  box-shadow: 0 2px 4px 0 rgba(0, 0, 0, 0.05);
+}
+
+.btn-action-secondary:active {
+  background: #e0e3e8;
+}
+
+.btn-icon {
+  font-size: 1.125rem;
+  line-height: 1;
+}
+
+/* === Responsive Design === */
+@media (max-width: 968px) {
+  .dashboard-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .quick-actions-card {
     max-width: 100%;
   }
 }
 
-/* === FIX: Dashboard layout alignment override === */
-.dashboard-grid {
-  display: flex !important;
-  flex-direction: row !important;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: 24px;
-  margin-top: 30px;
-  width: 100%;
-}
-
-.upcoming-events {
-  flex: 1 1 70%;
-  width: 70%;
-  display: block;
-}
-
-.quick-actions {
-  flex: 0 0 28%;
-  width: 28%;
-  max-width: 320px;
-  display: block;
-  align-self: flex-start;
-}
-
 @media (max-width: 768px) {
-  .dashboard-grid {
-    flex-direction: column !important;
+  .manager-page {
+    padding: 20px 16px;
   }
-
-  .upcoming-events,
-  .quick-actions {
-    width: 100% !important;
+  
+  .page-header h1 {
+    font-size: 1.5rem;
+  }
+  
+  .welcome-text {
+    font-size: 1rem;
+  }
+  
+  .card-content {
+    padding: 16px;
+  }
+  
+  .event-mini-item {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+  }
+  
+  .event-mini-time {
+    margin-left: 0;
   }
 }
