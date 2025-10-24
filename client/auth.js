@@ -1,3 +1,12 @@
+// Lightweight JWT decoder for browser use
+if (!window.jwt_decode) {
+  window.jwt_decode = function (token) {
+    const parts = token.split('.');
+    if (parts.length !== 3) throw new Error("Invalid token");
+    const payload = parts[1];
+    return JSON.parse(atob(payload.replace(/-/g, '+').replace(/_/g, '/')));
+  };
+}
 // auth.js — shared authentication check for manager pages
 // Uses global apiBase defined in config.js
 // Helper: fetch with Authorization header

@@ -1,13 +1,16 @@
 // /routes/route-auth.js
+const express = require("express");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const { ensureAuthenticated } = require("../middleware/auth");
 
 const JWT_SECRET = "supersecret"; // you can pull this from process.env later
 
-module.exports = (app, pool) => {
+const router = express.Router();
+
+module.exports = (pool) => {
   // === Register a new user ===
-  app.post("/register", async (req, res) => {
+  router.post("/register", async (req, res) => {
     try {
       const { first_name, last_name, email, password, organisation_id } = req.body;
 
@@ -33,7 +36,7 @@ module.exports = (app, pool) => {
   });
 
   // === Login ===
-  app.post("/login", async (req, res) => {
+  router.post("/login", async (req, res) => {
     try {
       const { email, password } = req.body;
 
@@ -72,7 +75,7 @@ module.exports = (app, pool) => {
   });
 
   // === Get current logged-in user ===
-  app.get("/users/me", async (req, res) => {
+  router.get("/users/me", async (req, res) => {
     try {
       const auth = req.headers.authorization;
       if (!auth) return res.status(401).json({ error: "Missing token" });
@@ -93,4 +96,6 @@ module.exports = (app, pool) => {
       res.status(401).json({ error: "Invalid or expired token" });
     }
   });
+
+  return router;
 };

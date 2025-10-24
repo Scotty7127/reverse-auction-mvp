@@ -1,4 +1,5 @@
-const jwt = require("jsonwebtoken");
+// Use jwt-decode in the browser instead of require("jsonwebtoken")
+const jwt_decode = window.jwt_decode;
 
 // === Inject chat panel HTML once and wire up navbar toggle ===
 (function ensureChatUI() {
@@ -236,7 +237,7 @@ function getCurrentUserId() {
   const token = localStorage.getItem("token");
   if (!token) return null;
   try {
-    const payload = JSON.parse(atob(token.split(".")[1]));
+    const payload = jwt_decode(token);
     return payload.id;
   } catch {
     return null;

@@ -1,6 +1,5 @@
 // routes/route-message.js
 const express = require("express");
-const jwt = require("jsonwebtoken");
 const { ensureAuthenticated } = require("../middleware/auth");
 const pool = require("../db/pool");
 
@@ -128,6 +127,7 @@ router.post("/messages", ensureAuthenticated, async (req, res) => {
 });
 
 module.exports = (io) => {
+  const jwt = require("jsonwebtoken");
   const SECRET = "supersecret"; // keep consistent with server.js
   io.on("connection", (socket) => {
     console.log("🔌 User connected to messaging");
