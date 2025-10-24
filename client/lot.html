@@ -6,6 +6,7 @@
   <title>Lot Details</title>
   <!-- Bootstrap CSS -->
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <!-- Custom Styles -->
   <link rel="stylesheet" href="css/style.css" />
   <script>
     window.requiredRoles = ["manager"];
@@ -13,78 +14,297 @@
   <script src="/config.js"></script>
   <script src="/auth.js"></script>
   <style>
-    /* Show greyed placeholder text for empty editable cells using data-placeholder */
+    :root {
+      --accent: #2563eb;
+      --text-dark: #1e293b;
+      --text-muted: #64748b;
+      --border: #e2e8f0;
+      --hover: #f8fafc;
+    }
+
+    .lot-page {
+      max-width: 1600px;
+      margin: 0 auto;
+      padding: 32px 24px;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica', 'Arial', sans-serif;
+      color: var(--text-dark);
+    }
+
+    .page-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 24px;
+    }
+
+    .page-header h1 {
+      font-size: 1.75rem;
+      font-weight: 600;
+      color: var(--text-dark);
+      margin: 0;
+      letter-spacing: -0.025em;
+    }
+
+    .btn-back {
+      background-color: #ffffff;
+      border: 1px solid var(--border);
+      color: var(--text-dark);
+      padding: 8px 16px;
+      border-radius: 6px;
+      font-weight: 500;
+      font-size: 0.9375rem;
+      transition: all 0.2s ease;
+      cursor: pointer;
+    }
+
+    .btn-back:hover {
+      background-color: #f8fafc;
+      border-color: var(--text-muted);
+    }
+
+    .lot-info-card {
+      background: #ffffff;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 20px;
+      margin-bottom: 24px;
+      box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+    }
+
+    .lot-info-card h2 {
+      font-size: 1.5rem;
+      font-weight: 600;
+      color: var(--text-dark);
+      margin: 0 0 8px 0;
+      letter-spacing: -0.025em;
+    }
+
+    .lot-info-card p {
+      color: var(--text-muted);
+      margin: 0;
+      line-height: 1.5;
+    }
+
+    .table-card {
+      background: #ffffff;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      overflow: hidden;
+      margin-bottom: 24px;
+      box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+    }
+
+    .table-card-header {
+      background: #f8fafc;
+      border-bottom: 1px solid var(--border);
+      padding: 16px 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+
+    .table-card-header h3 {
+      font-size: 1.0625rem;
+      font-weight: 600;
+      color: var(--text-dark);
+      margin: 0;
+      letter-spacing: -0.01em;
+    }
+
+    .actions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .actions button, .btn-action {
+      background-color: var(--accent);
+      border: none;
+      color: #ffffff;
+      padding: 8px 16px;
+      border-radius: 6px;
+      font-weight: 500;
+      font-size: 0.875rem;
+      transition: all 0.2s ease;
+      cursor: pointer;
+    }
+
+    .actions button:hover, .btn-action:hover {
+      background-color: #1d4ed8;
+      transform: translateY(-1px);
+    }
+
+    .actions button.btn-secondary {
+      background-color: #6b7280;
+    }
+
+    .actions button.btn-secondary:hover {
+      background-color: #4b5563;
+    }
+
+    .table-card-body {
+      padding: 20px;
+      overflow-x: auto;
+    }
+
+    .line-items-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.875rem;
+    }
+
+    .line-items-table thead th {
+      background-color: #f8fafc;
+      border: 1px solid var(--border);
+      color: var(--text-dark);
+      font-weight: 600;
+      font-size: 0.8125rem;
+      padding: 10px 8px;
+      text-align: center;
+      white-space: nowrap;
+    }
+
+    .line-items-table tbody td {
+      padding: 8px;
+      border: 1px solid var(--border);
+      vertical-align: middle;
+      min-width: 80px;
+    }
+
+    .line-items-table tbody tr:hover {
+      background-color: var(--hover);
+    }
+
+    td.line-item-cell {
+      cursor: text;
+    }
+
     td.line-item-cell:empty::before {
       content: attr(data-placeholder);
       color: #9aa0a6;
     }
+
+    td.line-item-cell:focus {
+      outline: 2px solid var(--accent);
+      outline-offset: -2px;
+      background-color: #eff6ff;
+    }
+
+    .delete-btn-small {
+      background-color: #ef4444;
+      border: none;
+      color: #ffffff;
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-size: 0.875rem;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .delete-btn-small:hover {
+      background-color: #dc2626;
+    }
+
+    input[type="checkbox"] {
+      cursor: pointer;
+      width: 18px;
+      height: 18px;
+    }
+
+    #excelInput {
+      display: none;
+    }
   </style>
 </head>
 <body>
-  <header>
-    <h1>Lot Details</h1>
-    <button onclick="goBack()">⬅ Back to Event</button>
-  </header>
+  <!-- Navbar -->
+  <nav class="navbar">
+    <div class="nav-container">
+      <a href="manager.html" class="brand">Tendersmith</a>
+      <ul class="nav-links">
+        <li><a href="manager.html">Home</a></li>
+        <li><a href="events.html">Events</a></li>
+        <li><a href="organisations.html">Organisations</a></li>
+        <li><a href="stats.html">Stats</a></li>
+        <li><a href="account.html">Account</a></li>
+        <li><button id="messages-btn" class="nav-icon-btn">💬</button></li>
+      </ul>
+    </div>
+  </nav>
 
-  <section id="lot-info" style="margin-bottom: 20px;">
-    <h2 id="lot-title">Loading...</h2>
-    <p id="lot-description"></p>
-  </section>
-
-  <section>
-    <h3>Line Items</h3>
-    <div class="actions">
-      <button onclick="addRow()">➕ Add Row</button>
-      <button onclick="saveAll()">💾 Save Changes</button>
-      <button onclick="exportExcel()">📤 Export Excel</button>
-      <input type="file" id="excelInput" style="display:none" accept=".xlsx" onchange="importExcel(event)" />
-      <button onclick="document.getElementById('excelInput').click()">📥 Import Excel</button>
+  <!-- Main Content -->
+  <main class="lot-page">
+    <div class="page-header">
+      <h1>Lot Details</h1>
+      <button onclick="goBack()" class="btn-back">⬅ Back to Event</button>
     </div>
 
-    <div style="overflow-x: auto;">
-      <table class="line-items-table" id="line-items-table">
-        <thead>
-          <tr>
-            <th colspan="7">Core Info</th>
-            <th colspan="6">Bid Settings</th>
-            <th colspan="4">Evaluative Settings</th>
-            <th colspan="3">Bid Interface Visibility</th>
-            <th rowspan="2">Actions</th>
-          </tr>
-          <tr>
-            <!-- Core Info -->
-            <th>Item #</th>
-            <th>Item Name</th>
-            <th>Group #</th>
-            <th>Description</th>
-            <th>Qty</th>
-            <th>UOM</th>
-
-            <!-- Bid Settings -->
-            <th>Input</th>
-            <th>Required</th>
-            <th>Ties</th>
-            <th>.00</th>
-            <th>Decrement</th>
-            <th>Opening</th>
-
-            <!-- Evaluative Settings -->
-            <th>Baseline</th>
-            <th>Ext Qty</th>
-            <th>Ext Base</th>
-            <th>Reserve</th>
-            <th>Incumbent</th>
-
-            <!-- Bid Interface Visibility -->
-            <th>Weighting</th>
-            <th>Opening</th>
-            <th>Reserve</th>
-          </tr>
-        </thead>
-        <tbody></tbody>
-      </table>
+    <!-- Lot Information Card -->
+    <div class="lot-info-card" id="lot-info">
+      <h2 id="lot-title">Loading...</h2>
+      <p id="lot-description"></p>
     </div>
-  </section>
+
+    <!-- Line Items Table Card -->
+    <div class="table-card">
+      <div class="table-card-header">
+        <h3>Line Items</h3>
+        <div class="actions">
+          <button onclick="addRow()">➕ Add Row</button>
+          <button onclick="saveAll()">💾 Save Changes</button>
+          <button onclick="exportExcel()" class="btn-secondary">📤 Export Excel</button>
+          <input type="file" id="excelInput" accept=".xlsx" onchange="importExcel(event)" />
+          <button onclick="document.getElementById('excelInput').click()" class="btn-secondary">📥 Import Excel</button>
+        </div>
+      </div>
+      <div class="table-card-body">
+        <table class="line-items-table" id="line-items-table">
+        <table class="line-items-table" id="line-items-table">
+          <thead>
+            <tr>
+              <th colspan="7">Core Info</th>
+              <th colspan="6">Bid Settings</th>
+              <th colspan="4">Evaluative Settings</th>
+              <th colspan="3">Bid Interface Visibility</th>
+              <th rowspan="2">Actions</th>
+            </tr>
+            <tr>
+              <!-- Core Info -->
+              <th>Item #</th>
+              <th>Item Name</th>
+              <th>Group #</th>
+              <th>Description</th>
+              <th>Qty</th>
+              <th>UOM</th>
+
+              <!-- Bid Settings -->
+              <th>Input</th>
+              <th>Required</th>
+              <th>Ties</th>
+              <th>.00</th>
+              <th>Decrement</th>
+              <th>Opening</th>
+
+              <!-- Evaluative Settings -->
+              <th>Baseline</th>
+              <th>Ext Qty</th>
+              <th>Ext Base</th>
+              <th>Reserve</th>
+              <th>Incumbent</th>
+
+              <!-- Bid Interface Visibility -->
+              <th>Weighting</th>
+              <th>Opening</th>
+              <th>Reserve</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+  </main>
 
   <script>
     const params = new URLSearchParams(window.location.search);
@@ -490,10 +710,17 @@
       await loadLineItems();
     })();
   </script>
+
+  <!-- Footer -->
   <footer>
     <p>Tendersmith © 2025</p>
   </footer>
-  <!-- Bootstrap JS (for optional interactivity) -->
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+
+  <!-- Bootstrap JS -->
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <!-- Socket.IO client -->
+  <script src="/socket.io/socket.io.js"></script>
+  <!-- Enable messaging script -->
+  <script src="/messages.js"></script>
 </body>
 </html>

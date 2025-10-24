@@ -7,37 +7,12 @@
   <!-- Bootstrap CSS -->
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
   <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="css/eventdetail.css">
   <script>
     window.requiredRoles = ["manager"];
   </script>
   <script src="/config.js"></script>
   <script src="/auth.js"></script>
-  <style>
-    form {
-      width: 60%;
-      margin: 30px auto;
-      text-align: left;
-      background-color: white;
-      padding: 25px;
-      border-radius: 8px;
-      box-shadow: 0 2px 6px rgba(0,0,0,0.1);
-    }
-    label {
-      font-weight: bold;
-      display: block;
-      margin-top: 15px;
-    }
-    input, select, textarea {
-      width: 100%;
-      padding: 8px;
-      margin-top: 5px;
-      border: 1px solid #ccc;
-      border-radius: 5px;
-    }
-    button {
-      margin-top: 20px;
-    }
-  </style>
 </head>
 <body>
   <nav class="navbar">
@@ -54,66 +29,115 @@
     </div>
   </nav>
 
-  <main>
-    <header>
-      <h1>Create New Event</h1>
-    </header>
-    <form id="create-event-form">
-      <label for="event-name">Event Name:</label>
-      <input type="text" id="event-name" required>
+  <div class="event-detail-page">
+    <div class="page-header">
+      <h1 id="page-title">Create New Event</h1>
+    </div>
 
-      <label for="organisation">Organisation:</label>
-      <select id="organisation" required>
-        <option value="">Select Organisation</option>
-      </select>
+    <div class="event-overview-card">
+      <form id="create-event-form">
+        <div class="form-grid">
+          <!-- Basic Information -->
+          <div class="form-section">
+            <h3 class="section-title">Basic Information</h3>
+            
+            <div class="form-group">
+              <label for="event-name" class="form-label">Event Name</label>
+              <input type="text" id="event-name" class="form-input" required>
+            </div>
 
-      <label for="category">Category:</label>
-      <select id="category" required>
-        <option value="">Select Category</option>
-      </select>
+            <div class="form-group">
+              <label for="organisation" class="form-label">Organisation</label>
+              <select id="organisation" class="form-select" required>
+                <option value="">Select Organisation</option>
+              </select>
+            </div>
 
-      <label for="currency">Currency:</label>
-      <select id="currency" required>
-        <option value="USD">USD</option>
-        <option value="EUR">EUR</option>
-        <option value="GBP">GBP</option>
-      </select>
+            <div class="form-group">
+              <label for="category" class="form-label">Category</label>
+              <select id="category" class="form-select" required>
+                <option value="">Select Category</option>
+              </select>
+            </div>
 
-      <label for="support-contact">Support Contact:</label>
-      <input type="text" id="support-contact" placeholder="e.g. support@company.com">
+            <div class="form-group">
+              <label for="currency" class="form-label">Currency</label>
+              <select id="currency" class="form-select" required>
+                <option value="USD">USD</option>
+                <option value="EUR">EUR</option>
+                <option value="GBP">GBP</option>
+              </select>
+            </div>
 
-      <label for="bid-manager">Bid Manager Contact:</label>
-      <input type="text" id="bid-manager" placeholder="e.g. jane@company.com">
+            <div class="form-group">
+              <label for="description" class="form-label">Event Description</label>
+              <textarea id="description" class="form-textarea" rows="4" placeholder="Enter a short summary..."></textarea>
+            </div>
+          </div>
 
-      <label for="auction-date">Auction Start Date:</label>
-      <input type="date" id="auction-date" required>
+          <!-- Contact Information -->
+          <div class="form-section">
+            <h3 class="section-title">Contact Information</h3>
+            
+            <div class="form-group">
+              <label for="support-contact" class="form-label">Support Contact</label>
+              <input type="text" id="support-contact" class="form-input" placeholder="e.g. support@company.com">
+            </div>
 
-      <label for="auction-time">Auction Start Time:</label>
-      <input type="time" id="auction-time" required>
+            <div class="form-group">
+              <label for="bid-manager" class="form-label">Bid Manager Contact</label>
+              <input type="text" id="bid-manager" class="form-input" placeholder="e.g. jane@company.com">
+            </div>
+          </div>
 
-      <label for="auction-duration">Auction Duration (minutes):</label>
-      <input type="number" id="auction-duration" placeholder="e.g. 30" min="1" required>
+          <!-- Auction Settings -->
+          <div class="form-section">
+            <h3 class="section-title">Auction Settings</h3>
+            
+            <div class="form-group">
+              <label for="auction-date" class="form-label">Auction Start Date</label>
+              <input type="date" id="auction-date" class="form-input" required>
+            </div>
 
-      <label for="extension-time">Extension Time (seconds):</label>
-      <input type="number" id="extension-time" placeholder="e.g. 120" min="1" required>
+            <div class="form-group">
+              <label for="auction-time" class="form-label">Auction Start Time</label>
+              <input type="time" id="auction-time" class="form-input" required>
+            </div>
 
-      <label for="extension-threshold">Extension Trigger Threshold (seconds):</label>
-      <input type="number" id="extension-threshold" placeholder="e.g. 60" min="1" required>
+            <div class="form-group">
+              <label for="auction-duration" class="form-label">Auction Duration (minutes)</label>
+              <input type="number" id="auction-duration" class="form-input" placeholder="e.g. 30" min="1" required>
+            </div>
 
-      <label for="description">Event Description:</label>
-      <textarea id="description" rows="4" placeholder="Enter a short summary..."></textarea>
+            <div class="form-group">
+              <label for="extension-time" class="form-label">Extension Time (seconds)</label>
+              <input type="number" id="extension-time" class="form-input" placeholder="e.g. 120" min="1" required>
+            </div>
 
-      <label for="sealed">
-        <input type="checkbox" id="sealed" name="sealed">
-        Sealed?
-      </label>
-      <small style="display:block; margin-top:4px; color:#555;">
-        Make this event invite only and anonymise bids.
-      </small>
+            <div class="form-group">
+              <label for="extension-threshold" class="form-label">Extension Trigger Threshold (seconds)</label>
+              <input type="number" id="extension-threshold" class="form-input" placeholder="e.g. 60" min="1" required>
+            </div>
 
-      <button type="submit">Create Event</button>
-    </form>
-  </main>
+            <div class="form-group">
+              <div class="checkbox-wrapper">
+                <input type="checkbox" id="sealed" name="sealed" class="form-checkbox">
+                <label for="sealed" class="checkbox-label">
+                  Sealed Event
+                  <span class="checkbox-help">Make this event invite only and anonymise bids</span>
+                </label>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="form-actions">
+          <button type="submit" class="btn-primary">Create Event</button>
+          <button type="button" class="btn-secondary" onclick="window.location.href='events.html'">Cancel</button>
+        </div>
+      </form>
+    </div>
+  </div>
 
   <script>
     const form = document.getElementById('create-event-form');
@@ -126,8 +150,8 @@
     const supportEl = document.getElementById('support-contact');
     const managerEl = document.getElementById('bid-manager');
     const descEl = document.getElementById('description');
-    const header = document.querySelector('header h1') || { textContent: '' };
-    const submitBtn = form.querySelector('button');
+    const pageTitle = document.getElementById('page-title');
+    const submitBtn = form.querySelector('button[type="submit"]');
     const auctionDateEl = document.getElementById('auction-date');
     const auctionTimeEl = document.getElementById('auction-time');
 
@@ -168,7 +192,7 @@
 
     // Edit mode setup
     if (eventId) {
-      header.textContent = '✏️ Edit Event';
+      pageTitle.textContent = 'Edit Event';
       submitBtn.textContent = 'Save Changes';
     }
 
@@ -188,8 +212,16 @@
         descEl.value = event.description;
         const sealedCheckbox = document.getElementById('sealed');
         sealedCheckbox.checked = event.type === 'sealed';
-        auctionDateEl.value = event.auction_time ? new Date(event.auction_time).toISOString().split('T')[0] : '';
-        auctionTimeEl.value = event.auction_time ? new Date(event.auction_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false }) : '';
+        
+        // Parse auction time correctly
+        if (event.auction_time) {
+          const auctionDateTime = new Date(event.auction_time);
+          auctionDateEl.value = auctionDateTime.toISOString().split('T')[0];
+          const hours = String(auctionDateTime.getHours()).padStart(2, '0');
+          const minutes = String(auctionDateTime.getMinutes()).padStart(2, '0');
+          auctionTimeEl.value = `${hours}:${minutes}`;
+        }
+        
         // Populate auction duration and extension fields if present
         if (typeof event.auction_duration !== "undefined" && event.auction_duration !== null) {
           document.getElementById('auction-duration').value = event.auction_duration;
@@ -222,19 +254,25 @@
 
       const auctionDate = auctionDateEl.value;
       const auctionTime = auctionTimeEl.value;
+      
+      if (!auctionDate || !auctionTime) {
+        alert('Please provide both auction date and time');
+        return;
+      }
+      
       const auction_time = new Date(`${auctionDate}T${auctionTime}`).toISOString();
 
       const eventData = {
         title: titleEl.value,
-        organisation_id: orgEl.value,
-        category_id: catEl.value,
+        organisation_id: parseInt(orgEl.value),
+        category_id: parseInt(catEl.value),
         currency: currencyEl.value,
-        support_contact: supportEl.value,
-        bid_manager: managerEl.value,
+        support_contact: supportEl.value || '',
+        bid_manager: managerEl.value || '',
         auction_duration: Number(document.getElementById('auction-duration').value),
         extension_time: Number(document.getElementById('extension-time').value),
         extension_threshold: Number(document.getElementById('extension-threshold').value),
-        description: descEl.value,
+        description: descEl.value || '',
         auction_time,
         type: document.getElementById('sealed').checked ? 'sealed' : 'open'
       };
@@ -264,15 +302,12 @@
       }
     });
   </script>
-  <footer>
-    <p>Tendersmith © 2025</p>
-  </footer>
-</footer>
+
   <!-- Socket.IO client -->
   <script src="/socket.io/socket.io.js"></script>
   <!-- Enable messaging script -->
   <script src="/messages.js"></script>
   <!-- Bootstrap JS (for optional interactivity) -->
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>

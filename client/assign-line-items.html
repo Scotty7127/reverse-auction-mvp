@@ -2,9 +2,11 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Assign Line Items to Bidder</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <!-- Bootstrap CSS -->
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <!-- Custom Styles -->
   <link rel="stylesheet" href="css/style.css">
   <script>
     window.requiredRoles = ["manager"];
@@ -12,28 +14,214 @@
   <script src="/config.js"></script>
   <script src="/auth.js"></script>
   <style>
-    body {
-      background-color: #f7f7f7;
+    :root {
+      --accent: #2563eb;
+      --text-dark: #1e293b;
+      --text-muted: #64748b;
+      --border: #e2e8f0;
+      --hover: #f8fafc;
     }
-    .table-container {
-      overflow-x: auto;
-      background-color: white;
-      border-radius: 6px;
-      box-shadow: 0 2px 5px rgba(0,0,0,0.1);
-      padding: 15px;
+
+    .assign-page {
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 32px 24px;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica', 'Arial', sans-serif;
+      color: var(--text-dark);
     }
-    textarea {
-      width: 100%;
-      max-width: 400px;
-      border-radius: 6px;
-      border: 1px solid #ccc;
-      padding: 8px;
-      resize: vertical;
-    }
-    .assign-header {
+
+    .page-header {
       display: flex;
       justify-content: space-between;
       align-items: center;
+      margin-bottom: 24px;
+    }
+
+    .page-header h2 {
+      font-size: 1.75rem;
+      font-weight: 600;
+      color: var(--text-dark);
+      margin: 0;
+      letter-spacing: -0.025em;
+    }
+
+    .bidder-info-card {
+      background: #ffffff;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 16px 20px;
+      margin-bottom: 24px;
+      box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+    }
+
+    .paste-card {
+      background: #ffffff;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 20px;
+      margin-bottom: 24px;
+      box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+      display: none;
+    }
+
+    .paste-card.show {
+      display: block;
+    }
+
+    .paste-card label {
+      font-weight: 600;
+      color: var(--text-dark);
+      margin-bottom: 12px;
+      display: block;
+    }
+
+    .paste-card textarea {
+      width: 100%;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      padding: 12px;
+      resize: vertical;
+      font-family: monospace;
+      font-size: 0.875rem;
+      transition: border-color 0.2s ease;
+    }
+
+    .paste-card textarea:focus {
+      outline: none;
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+    }
+
+    .paste-hint {
+      color: var(--text-muted);
+      font-size: 0.875rem;
+      margin-top: 8px;
+    }
+
+    .table-card {
+      background: #ffffff;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      overflow: hidden;
+      margin-bottom: 24px;
+      box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+    }
+
+    .table-card-header {
+      background: #f8fafc;
+      border-bottom: 1px solid var(--border);
+      padding: 16px 20px;
+    }
+
+    .table-card-header h3 {
+      font-size: 1.0625rem;
+      font-weight: 600;
+      color: var(--text-dark);
+      margin: 0;
+      letter-spacing: -0.01em;
+    }
+
+    .table-card-body {
+      padding: 20px;
+      overflow-x: auto;
+    }
+
+    .table {
+      margin: 0;
+    }
+
+    .table thead th {
+      background-color: #f8fafc;
+      border-bottom: 2px solid var(--border);
+      color: var(--text-dark);
+      font-weight: 600;
+      font-size: 0.875rem;
+      padding: 12px;
+    }
+
+    .table tbody td {
+      padding: 12px;
+      vertical-align: middle;
+      border-bottom: 1px solid var(--border);
+      color: var(--text-dark);
+    }
+
+    .table tbody tr:hover {
+      background-color: var(--hover);
+    }
+
+    .btn-back {
+      background-color: #ffffff;
+      border: 1px solid var(--border);
+      color: var(--text-dark);
+      padding: 8px 16px;
+      border-radius: 6px;
+      font-weight: 500;
+      font-size: 0.9375rem;
+      transition: all 0.2s ease;
+    }
+
+    .btn-back:hover {
+      background-color: #f8fafc;
+      border-color: var(--text-muted);
+      color: var(--text-dark);
+    }
+
+    .btn-apply {
+      background-color: var(--accent);
+      border: none;
+      color: #ffffff;
+      padding: 8px 20px;
+      border-radius: 6px;
+      font-weight: 500;
+      font-size: 0.9375rem;
+      transition: all 0.2s ease;
+    }
+
+    .btn-apply:hover {
+      background-color: #1d4ed8;
+      transform: translateY(-1px);
+    }
+
+    .btn-save {
+      background-color: var(--accent);
+      border: none;
+      color: #ffffff;
+      padding: 12px 32px;
+      border-radius: 6px;
+      font-weight: 600;
+      font-size: 1rem;
+      transition: all 0.2s ease;
+      box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1);
+    }
+
+    .btn-save:hover {
+      background-color: #1d4ed8;
+      transform: translateY(-1px);
+      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+    }
+
+    .btn-toggle-paste {
+      background-color: #ffffff;
+      border: 1px solid var(--border);
+      color: var(--text-dark);
+      padding: 10px 20px;
+      border-radius: 6px;
+      font-weight: 500;
+      font-size: 0.9375rem;
+      transition: all 0.2s ease;
+      margin-bottom: 16px;
+    }
+
+    .btn-toggle-paste:hover {
+      background-color: #f8fafc;
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+
+    .loading-text {
+      color: var(--text-muted);
+      font-style: italic;
     }
   </style>
 </head>
@@ -51,29 +239,54 @@
         <li><a href="account.html">Account</a></li>
         <li><button id="messages-btn" class="nav-icon-btn">💬</button></li>
       </ul>
-        </a>
-      </div>
     </div>
   </nav>
 
-  <main class="container mt-4">
-    <div class="assign-header">
+  <!-- Main Content -->
+  <main class="assign-page">
+    <div class="page-header">
       <h2>Assign Line Items to Bidder</h2>
-      <button id="backBtn" class="btn btn-secondary">← Back to Members</button>
-    </div>
-    <p id="bidder-info" class="mt-2 text-muted">Loading bidder info...</p>
-
-    <div class="mt-3">
-      <label><strong>Paste YES/NO column (from spreadsheet):</strong></label><br>
-      <textarea id="paste-area" rows="4" placeholder="Paste YES/NO values here (one per line)"></textarea><br>
-      <button id="apply-paste" class="btn btn-sm btn-outline-primary mt-2">Apply to Table</button>
-      <small class="text-muted d-block mt-1">Each YES/NO corresponds to a line item row in order.</small>
+      <button id="backBtn" class="btn-back">← Back to Members</button>
     </div>
 
-    <div id="line-items-container" class="table-container mt-4">Loading line items...</div>
+    <!-- Bidder Information Card -->
+    <div class="bidder-info-card">
+      <p id="bidder-info" class="loading-text" style="margin: 0;">Loading bidder info...</p>
+    </div>
 
-    <button id="save-assignments" class="btn btn-primary mt-3">💾 Save Assignments</button>
+    <!-- Toggle Paste Button -->
+    <button id="toggle-paste-btn" class="btn-toggle-paste">📋 Paste Assignments</button>
+
+    <!-- Paste YES/NO Card (Hidden by default) -->
+    <div class="paste-card" id="paste-card">
+      <label>Paste YES/NO column (from spreadsheet):</label>
+      <textarea id="paste-area" rows="4" placeholder="Paste YES/NO values here (one per line)"></textarea>
+      <div style="margin-top: 12px;">
+        <button id="apply-paste" class="btn-apply">Apply to Table</button>
+      </div>
+      <p class="paste-hint">Each YES/NO corresponds to a line item row in order.</p>
+    </div>
+
+    <!-- Line Items Table Card -->
+    <div class="table-card">
+      <div class="table-card-header">
+        <h3>Line Items</h3>
+      </div>
+      <div class="table-card-body">
+        <div id="line-items-container" class="loading-text">Loading line items...</div>
+      </div>
+    </div>
+
+    <!-- Save Button -->
+    <div style="text-align: center;">
+      <button id="save-assignments" class="btn-save">💾 Save Assignments</button>
+    </div>
   </main>
+
+  <!-- Footer -->
+  <footer>
+    <p>Tendersmith © 2025</p>
+  </footer>
 
   <script>
     const params = new URLSearchParams(window.location.search);
@@ -146,8 +359,7 @@
         }));
 
         let html = `
-        <div style="overflow-x:auto;">
-          <table class="table table-bordered table-sm">
+          <table class="table table-sm">
             <thead>
               <tr>
                 <th>Lot</th>
@@ -157,7 +369,7 @@
                 <th>Quantity</th>
                 <th>Weighting (%)</th>
                 <th>Opening Bid (${eventCurrencySymbol})</th>
-                <th>Assigned (Yes/No)</th>
+                <th style="text-align: center;">Assigned</th>
               </tr>
             </thead>
             <tbody>
@@ -174,22 +386,22 @@
               <td>${item.description || '-'}</td>
               <td>${item.quantity || '-'}</td>
               <td>
-                <div class="input-group" style="max-width: 120px;">
+                <div class="input-group" style="max-width: 140px;">
                   <input type="number" step="0.01" class="form-control form-control-sm weighting-input" data-id="${item.id}" placeholder="100" value="${weighting}">
                   <span class="input-group-text">%</span>
                 </div>
               </td>
               <td>
-                <input type="number" step="0.01" class="form-control form-control-sm opening-bid-input" data-id="${item.id}" placeholder="0.00" style="width:100px;" value="${openingBid}">
+                <input type="number" step="0.01" class="form-control form-control-sm opening-bid-input" data-id="${item.id}" placeholder="0.00" style="width:120px;" value="${openingBid}">
               </td>
               <td style="text-align:center;">
-                <input type="checkbox" class="assign-checkbox" data-id="${item.id}" ${item.assigned ? 'checked' : ''}>
+                <input type="checkbox" class="form-check-input assign-checkbox" data-id="${item.id}" ${item.assigned ? 'checked' : ''} style="cursor: pointer;">
               </td>
             </tr>
           `;
         });
 
-        html += "</tbody></table></div>";
+        html += "</tbody></table>";
         document.getElementById("line-items-container").innerHTML = html;
       } catch (err) {
         console.error("Error loading line items:", err);
@@ -278,6 +490,12 @@
       setTimeout(() => document.getElementById("apply-paste").click(), 50);
     });
 
+    // Toggle paste section
+    document.getElementById("toggle-paste-btn").addEventListener("click", () => {
+      const pasteCard = document.getElementById("paste-card");
+      pasteCard.classList.toggle("show");
+    });
+
     // Back button
     document.getElementById("backBtn").addEventListener("click", () => {
       window.location.href = `event.html?id=${eventId}&tab=members`;
@@ -293,6 +511,12 @@
     })();
 
   </script>
+
+  <!-- Bootstrap JS -->
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <!-- Socket.IO client -->
+  <script src="/socket.io/socket.io.js"></script>
+  <!-- Enable messaging script -->
+  <script src="/messages.js"></script>
 </body>
 </html>

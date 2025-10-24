@@ -194,6 +194,76 @@ module.exports = (io) => {
     }
   });
 
+  // === Update Event (PUT) ===
+  router.put("/events/:id", ensureAuthenticated, async (req, res) => {
+    try {
+      if (req.user.role !== "manager") {
+        return res.status(403).json({ error: "Only managers can update events" });
+      }
+
+      const {
+        title,
+        description,
+        organisation_id,
+        category_id,
+        currency,
+        support_contact,
+        bid_manager,
+        auction_time,
+        type,
+        auction_duration,
+        extension_time,
+        extension_threshold,
+      } = req.body;
+
+      const auctionDurationInterval = normalizeInterval(auction_duration, "minutes");
+      const extensionTimeInterval = normalizeInterval(extension_time, "seconds");
+      const extensionThresholdInterval = normalizeInterval(extension_threshold, "seconds");
+
+      const result = await pool.query(
+        `UPDATE events 
+         SET title = $1, 
+             description = $2, 
+             organisation_id = $3, 
+             category_id = $4, 
+             currency = $5, 
+             support_contact = $6, 
+             bid_manager = $7, 
+             auction_time = $8, 
+             type = $9,
+             auction_duration = $10,
+             extension_time = $11,
+             extension_threshold = $12
+         WHERE id = $13
+         RETURNING *`,
+        [
+          title,
+          description,
+          organisation_id,
+          category_id,
+          currency,
+          support_contact,
+          bid_manager,
+          auction_time,
+          type || "open",
+          auctionDurationInterval,
+          extensionTimeInterval,
+          extensionThresholdInterval,
+          req.params.id,
+        ]
+      );
+
+      if (result.rows.length === 0) {
+        return res.status(404).json({ error: "Event not found" });
+      }
+
+      res.json(result.rows[0]);
+    } catch (err) {
+      console.error("Error updating event:", err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   // === Get All Events ===
   router.get("/events", ensureAuthenticated, async (req, res) => {
     try {
@@ -373,6 +443,75 @@ module.exports = (io) => {
     } catch (err) {
       console.error("Error fetching stats:", err);
       res.status(500).json({ error: "Failed to fetch stats" });
+    }
+  });
+
+  // === Get Event Members ===
+  router.get("/events/:id/members", ensureAuthenticated, async (req, res) => {
+    try {
+      const eventId = req.params.id;
+      
+      const result = await pool.query(
+        `SELECT em.user_id, em.role, u.email, u.first_name, u.last_name
+         FROM event_members em
+         JOIN users u ON em.user_id = u.id
+         WHERE em.event_id = $1
+         ORDER BY em.role, u.first_name`,
+        [eventId]
+      );
+
+      res.json(result.rows);
+    } catch (err) {
+      console.error("Error fetching event members:", err);
+      res.status(500).json({ error: "Failed to fetch event members" });
+    }
+  });
+
+  // === Update Event Members ===
+  router.post("/events/:id/members", ensureAuthenticated, async (req, res) => {
+    try {
+      if (req.user.role !== "manager") {
+        return res.status(403).json({ error: "Only managers can update event members" });
+      }
+
+      const eventId = req.params.id;
+      const { managers = [], bidders = [] } = req.body;
+
+      // Start a transaction
+      const client = await pool.connect();
+      try {
+        await client.query("BEGIN");
+
+        // Delete existing members
+        await client.query("DELETE FROM event_members WHERE event_id = $1", [eventId]);
+
+        // Insert managers
+        for (const userId of managers) {
+          await client.query(
+            "INSERT INTO event_members (event_id, user_id, role) VALUES ($1, $2, $3)",
+            [eventId, userId, "manager"]
+          );
+        }
+
+        // Insert bidders
+        for (const userId of bidders) {
+          await client.query(
+            "INSERT INTO event_members (event_id, user_id, role) VALUES ($1, $2, $3)",
+            [eventId, userId, "bidder"]
+          );
+        }
+
+        await client.query("COMMIT");
+        res.json({ success: true, message: "Members updated successfully" });
+      } catch (err) {
+        await client.query("ROLLBACK");
+        throw err;
+      } finally {
+        client.release();
+      }
+    } catch (err) {
+      console.error("Error updating event members:", err);
+      res.status(500).json({ error: "Failed to update event members" });
     }
   });
 
