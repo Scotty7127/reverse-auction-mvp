@@ -213,10 +213,16 @@
         const sealedCheckbox = document.getElementById('sealed');
         sealedCheckbox.checked = event.type === 'sealed';
         
-        // Parse auction time correctly
+        // Parse auction time correctly - treat as local time
         if (event.auction_time) {
           const auctionDateTime = new Date(event.auction_time);
-          auctionDateEl.value = auctionDateTime.toISOString().split('T')[0];
+          // Get the date in local timezone format (YYYY-MM-DD)
+          const year = auctionDateTime.getFullYear();
+          const month = String(auctionDateTime.getMonth() + 1).padStart(2, '0');
+          const day = String(auctionDateTime.getDate()).padStart(2, '0');
+          auctionDateEl.value = `${year}-${month}-${day}`;
+          
+          // Get the time in local timezone format (HH:MM)
           const hours = String(auctionDateTime.getHours()).padStart(2, '0');
           const minutes = String(auctionDateTime.getMinutes()).padStart(2, '0');
           auctionTimeEl.value = `${hours}:${minutes}`;
@@ -260,7 +266,8 @@
         return;
       }
       
-      const auction_time = new Date(`${auctionDate}T${auctionTime}`).toISOString();
+      // Create datetime string in ISO format but preserve local timezone
+      const auction_time = `${auctionDate}T${auctionTime}:00`;
 
       const eventData = {
         title: titleEl.value,

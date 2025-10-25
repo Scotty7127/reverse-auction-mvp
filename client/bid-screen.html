@@ -27,31 +27,46 @@
 
   <main class="content container mt-4">
     <h2 id="event-title">Auction</h2>
-    <p><strong>Starts:</strong> <span id="auction-start-time">Loading...</span></p>
-    <p><strong>Time left:</strong> <span id="auction-countdown">00:00:00</span></p>
-    <p><strong>Status:</strong> <span id="auction-status">Loading...</span></p>
+    
+    <!-- Pre-Auction Message (shown when auction hasn't started) -->
+    <div id="pre-auction-message" style="display: none; text-align: center; padding: 40px 20px; background: #f8f9fa; border-radius: 8px; margin: 20px 0;">
+      <h3 style="color: #2563eb; margin-bottom: 16px;">Auction Starts In</h3>
+      <div id="time-until-auction" style="font-size: 2.5rem; font-weight: 700; color: #1e293b; margin-bottom: 8px;">--:--:--</div>
+      <p style="color: #64748b; margin: 0;">Please wait for the auction to begin</p>
+    </div>
+
+    <!-- Auction Info (shown when auction is active) -->
+    <div id="auction-info">
+      <p><strong>Starts:</strong> <span id="auction-start-time">Loading...</span></p>
+      <p><strong>Time left:</strong> <span id="auction-countdown">00:00:00</span></p>
+      <p><strong>Status:</strong> <span id="auction-status">Loading...</span></p>
+    </div>
     <hr />
 
     <!-- Bidder Line Items -->
     <section id="bidder-lineitems" class="mt-4">
       <h4>Your Line Items</h4>
-      <table class="table table-striped">
-        <thead>
-          <tr>
-            <th>Rank</th>
-            <th>Line Item</th>
-            <th>Quantity</th>
-            <th>Extended Qty</th>
-            <th>Your Bid</th>
-            <th>Extended Bid</th>
-          </tr>
-        </thead>
-        <tbody id="lineitem-body">
-          <tr><td colspan="6" class="text-center text-muted">Loading your line items...</td></tr>
-        </tbody>
-      </table>
-      <div class="text-end mt-3">
-        <button id="submitAllBidsBtn" class="btn btn-primary">Submit All Bids</button>
+      <div id="lineitem-overlay" style="position: relative;">
+        <table class="table table-striped">
+          <thead>
+            <tr>
+              <th>Rank</th>
+              <th>Line Item</th>
+              <th>Quantity</th>
+              <th>Extended Qty</th>
+              <th>Your Bid</th>
+              <th>Extended Bid</th>
+            </tr>
+          </thead>
+          <tbody id="lineitem-body">
+            <tr><td colspan="6" class="text-center text-muted">Loading your line items...</td></tr>
+          </tbody>
+        </table>
+        <div class="text-end mt-3">
+          <button id="submitAllBidsBtn" class="btn btn-primary">Submit All Bids</button>
+        </div>
+        <!-- Grey overlay for pre-auction state -->
+        <div id="grey-overlay" style="display: none; position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: rgba(248, 249, 250, 0.9); backdrop-filter: blur(2px); border-radius: 4px; pointer-events: none;"></div>
       </div>
     </section>
   </main>
@@ -59,10 +74,63 @@
   <script>
     let eventId;
     let socket;
+    let auctionStartTime = null;
     let auctionEndTime = null;
     let countdownInterval = null;
+    let preAuctionInterval = null;
+    let auctionHasStarted = false;
 
-    // === Countdown Timer ===
+    // === Pre-Auction Countdown (until auction starts) ===
+    function startPreAuctionCountdown(startTime) {
+      clearInterval(preAuctionInterval);
+      
+      function updatePreAuctionDisplay() {
+        const now = new Date();
+        const diff = startTime - now;
+        
+        if (diff <= 0) {
+          // Auction has started
+          clearInterval(preAuctionInterval);
+          auctionHasStarted = true;
+          showAuctionActive();
+          // Start the regular countdown (time left in auction)
+          auctionEndTime = new Date(startTime.getTime() + 60 * 60 * 1000);
+          startCountdown(auctionEndTime);
+          return;
+        }
+        
+        // Calculate time until start
+        const hours = Math.floor(diff / 1000 / 60 / 60);
+        const minutes = Math.floor((diff / 1000 / 60) % 60);
+        const seconds = Math.floor((diff / 1000) % 60);
+        document.getElementById("time-until-auction").textContent =
+          `${String(hours).padStart(2,'0')}:${String(minutes).padStart(2,'0')}:${String(seconds).padStart(2,'0')}`;
+      }
+      
+      updatePreAuctionDisplay();
+      preAuctionInterval = setInterval(updatePreAuctionDisplay, 1000);
+    }
+
+    // === Show pre-auction state ===
+    function showPreAuctionState() {
+      document.getElementById("pre-auction-message").style.display = "block";
+      document.getElementById("auction-info").style.display = "none";
+      document.getElementById("grey-overlay").style.display = "block";
+    }
+
+    // === Show auction active state ===
+    function showAuctionActive() {
+      document.getElementById("pre-auction-message").style.display = "none";
+      document.getElementById("auction-info").style.display = "block";
+      document.getElementById("grey-overlay").style.display = "none";
+      
+      // Enable all bid inputs
+      document.querySelectorAll('.bid-input').forEach(input => {
+        input.disabled = false;
+      });
+    }
+
+    // === Countdown Timer (time left in auction) ===
     function startCountdown(endTime) {
       clearInterval(countdownInterval);
       countdownInterval = setInterval(() => {
@@ -86,14 +154,32 @@
       try {
         const res = await authFetch(`/events/${eventId}/stats`);
         const stats = await res.json();
-        const startTime = stats.auction_time ? new Date(stats.auction_time) : null;
+        auctionStartTime = stats.auction_time ? new Date(stats.auction_time) : null;
 
-        document.getElementById("auction-start-time").textContent = startTime ? startTime.toLocaleString() : "Not set";
+        // Set the title with Organisation - Category - Event Name
+        const orgName = stats.organisation_name || 'Unknown Organisation';
+        const catName = stats.category_name || 'No Category';
+        const eventName = stats.title || 'Unnamed Event';
+        document.getElementById("event-title").textContent = `${orgName} - ${catName} - ${eventName}`;
+
+        document.getElementById("auction-start-time").textContent = auctionStartTime ? auctionStartTime.toLocaleString() : "Not set";
         document.getElementById("auction-status").textContent = stats.type === "paused" ? "Paused" : "Active";
 
-        if (startTime) {
-          auctionEndTime = new Date(startTime.getTime() + 60 * 60 * 1000);
-          startCountdown(auctionEndTime);
+        if (auctionStartTime) {
+          const now = new Date();
+          
+          // Check if auction has already started
+          if (now >= auctionStartTime) {
+            auctionHasStarted = true;
+            showAuctionActive();
+            auctionEndTime = new Date(auctionStartTime.getTime() + 60 * 60 * 1000);
+            startCountdown(auctionEndTime);
+          } else {
+            // Auction hasn't started yet
+            auctionHasStarted = false;
+            showPreAuctionState();
+            startPreAuctionCountdown(auctionStartTime);
+          }
         }
       } catch (err) {
         console.error("Error loading auction stats:", err);
@@ -137,7 +223,7 @@
             <td>
               <input type="number" class="form-control form-control-sm bid-input" 
                 id="bid-${item.id}" min="0" step="0.01" placeholder="Enter bid" 
-                value="${item.current_bid || ''}">
+                value="${item.current_bid || ''}" ${!auctionHasStarted ? 'disabled' : ''}>
             </td>
             <td id="extended-${item.id}">${item.current_bid && item.ext_quantity ? 
                 (item.current_bid * item.ext_quantity).toFixed(2) : '-'}</td>
@@ -147,6 +233,7 @@
         // Add event listeners for real-time extended bid calc and submission
         document.querySelectorAll('.bid-input').forEach(input => {
           input.addEventListener('input', e => {
+            if (!auctionHasStarted) return;
             const id = e.target.id.split('-')[1];
             const row = items.find(i => i.id == id);
             const val = parseFloat(e.target.value);
@@ -155,6 +242,7 @@
           });
 
           input.addEventListener('change', async e => {
+            if (!auctionHasStarted) return;
             const id = e.target.id.split('-')[1];
             const val = parseFloat(e.target.value);
             if (!val || isNaN(val)) return;
@@ -179,6 +267,11 @@
     // === Submit all bids at once ===
     document.addEventListener("click", async (e) => {
       if (e.target && e.target.id === "submitAllBidsBtn") {
+        if (!auctionHasStarted) {
+          alert("The auction has not started yet. Please wait for the auction to begin.");
+          return;
+        }
+        
         const inputs = document.querySelectorAll(".bid-input");
         const bidPayload = [];
         inputs.forEach(input => {

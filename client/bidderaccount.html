@@ -6,6 +6,7 @@
   <title>My Account - Bidder</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
   <link rel="stylesheet" href="css/style.css" />
+  <link rel="stylesheet" href="css/account.css">
   <link rel="stylesheet" href="css/bidder.css">
   <script>
     // Only bidders can access this page
@@ -28,15 +29,60 @@
     </div>
   </nav>
 
-  <main class="content">
-    <h1>My Account</h1>
+  <main class="account-page">
+    <div class="page-header text-center mb-4">
+      <h2>Account Settings</h2>
+      <p>Manage your bidder account and get support</p>
+    </div>
 
-    <section class="account-details">
-      <p><strong>Name:</strong> <span id="userName">Loading...</span></p>
-      <p><strong>Email:</strong> <span id="userEmail">Loading...</span></p>
-      <p><strong>Role:</strong> <span id="userRole">Loading...</span></p>
-    </section>
+    <div class="account-grid">
+      <!-- Account Info Card -->
+      <section class="account-info-card">
+        <div class="card-header-custom">
+          <h3 class="card-title">My Account</h3>
+        </div>
+        <div class="card-content">
+          <div class="info-row">
+            <span class="info-label">Name:</span>
+            <span class="info-value" id="userName">Loading...</span>
+          </div>
+          <div class="info-row">
+            <span class="info-label">Email:</span>
+            <span class="info-value" id="userEmail">Loading...</span>
+          </div>
+          <div class="info-row">
+            <span class="info-label">Role:</span>
+            <span class="info-value" id="userRole">Loading...</span>
+          </div>
+          <div class="account-actions">
+            <button class="btn-account-logout" id="logoutBtn">
+              Logout
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Get Help Card -->
+      <section class="invite-card">
+        <div class="card-header-custom">
+          <h3 class="card-title">Need Assistance?</h3>
+        </div>
+        <div class="card-content">
+          <p style="color: var(--text-muted); font-size: 0.9375rem; margin-bottom: 20px;">
+            Having trouble with the auction platform? Our support team is here to help you.
+          </p>
+          <button class="btn-invite-submit" id="getHelpBtn" style="width: 100%;">
+            <span style="font-size: 1.125rem;">💬</span> Get Help
+          </button>
+          <p id="helpMessage" style="margin-top: 16px; text-align: center; font-size: 0.875rem; color: var(--text-muted);"></p>
+        </div>
+      </section>
+    </div>
   </main>
+
+  <footer style="text-align: center; color: #777; font-size: 14px; margin-top: 50px; padding-bottom: 20px;">
+    <p>Tendersmith © 2025</p>
+  </footer>
 
   <script>
     document.addEventListener("DOMContentLoaded", async () => {
@@ -56,11 +102,24 @@
         document.getElementById("userEmail").textContent = "";
         document.getElementById("userRole").textContent = "";
       }
+      
+      // Logout button
       const logoutBtn = document.getElementById("logoutBtn");
       if (logoutBtn) {
         logoutBtn.addEventListener("click", () => {
           localStorage.removeItem("token");
+          localStorage.removeItem("user");
           window.location.href = "/start.html";
+        });
+      }
+
+      // Get Help button (placeholder for future functionality)
+      const getHelpBtn = document.getElementById("getHelpBtn");
+      const helpMessage = document.getElementById("helpMessage");
+      if (getHelpBtn) {
+        getHelpBtn.addEventListener("click", () => {
+          helpMessage.style.color = "var(--text-muted)";
+          helpMessage.textContent = "stop pressing buttons this dont work yet.";
         });
       }
     });

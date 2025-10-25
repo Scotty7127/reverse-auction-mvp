@@ -427,7 +427,11 @@ module.exports = (io) => {
         [eventId]
       );
       const eventResult = await pool.query(
-        `SELECT auction_time, type FROM events WHERE id=$1`,
+        `SELECT e.auction_time, e.type, e.title, o.name AS organisation_name, c.name AS category_name
+         FROM events e
+         LEFT JOIN organisations o ON e.organisation_id = o.id
+         LEFT JOIN categories c ON e.category_id = c.id
+         WHERE e.id=$1`,
         [eventId]
       );
       const event = eventResult.rows[0];
@@ -439,6 +443,9 @@ module.exports = (io) => {
         last_bid_time: bids.rows[0].last_bid_time,
         auction_time: event ? event.auction_time : null,
         type: event ? event.type : null,
+        title: event ? event.title : null,
+        organisation_name: event ? event.organisation_name : null,
+        category_name: event ? event.category_name : null,
       });
     } catch (err) {
       console.error("Error fetching stats:", err);
@@ -482,21 +489,35 @@ module.exports = (io) => {
       try {
         await client.query("BEGIN");
 
-        // Delete existing members
+        // Get the event creator to preserve them
+        const eventRes = await client.query("SELECT created_by FROM events WHERE id = $1", [eventId]);
+        const creatorId = eventRes.rows[0]?.created_by;
+
+        // Delete existing members (except creator if they exist)
         await client.query("DELETE FROM event_members WHERE event_id = $1", [eventId]);
 
-        // Insert managers
-        for (const userId of managers) {
+        // Insert creator first if they exist (as 'creator' role)
+        if (creatorId) {
           await client.query(
-            "INSERT INTO event_members (event_id, user_id, role) VALUES ($1, $2, $3)",
-            [eventId, userId, "manager"]
+            "INSERT INTO event_members (event_id, user_id, role) VALUES ($1, $2, $3) ON CONFLICT (event_id, user_id) DO NOTHING",
+            [eventId, creatorId, "creator"]
           );
+        }
+
+        // Insert managers (as 'participant' role, since 'manager' is not allowed)
+        for (const userId of managers) {
+          if (userId !== creatorId) {
+            await client.query(
+              "INSERT INTO event_members (event_id, user_id, role) VALUES ($1, $2, $3) ON CONFLICT (event_id, user_id) DO NOTHING",
+              [eventId, userId, "participant"]
+            );
+          }
         }
 
         // Insert bidders
         for (const userId of bidders) {
           await client.query(
-            "INSERT INTO event_members (event_id, user_id, role) VALUES ($1, $2, $3)",
+            "INSERT INTO event_members (event_id, user_id, role) VALUES ($1, $2, $3) ON CONFLICT (event_id, user_id) DO NOTHING",
             [eventId, userId, "bidder"]
           );
         }

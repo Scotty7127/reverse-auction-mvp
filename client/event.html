@@ -193,34 +193,18 @@
         document.getElementById('event-details').innerHTML = `
   <div class="event-header-section">
     <div>
+      <div style="margin-bottom: 8px;">
+        <span style="display: inline-block; font-size: 1.125rem; font-weight: 600; color: #2563eb;">${event.organisation_name || 'No Organisation'}</span>
+        <span style="display: inline-block; margin: 0 8px; color: #cbd5e1;">•</span>
+        <span style="display: inline-block; font-size: 1.125rem; font-weight: 600; color: #64748b;">${event.category_name || 'No Category'}</span>
+      </div>
       <h1 class="event-title">${event.title}</h1>
       <p class="event-description">${event.description || ''}</p>
     </div>
-    <div class="event-actions">
-      <button id="edit-btn" class="btn-edit">Edit Event</button>
-      <button id="delete-btn" class="btn-delete">Delete Event</button>
-    </div>
-  </div>
-  <div class="event-details-grid">
-    <div class="detail-row">
-      <span class="detail-label">Organisation:</span>
-      <span class="detail-value">${event.organisation_name || '-'}</span>
-    </div>
-    <div class="detail-row">
-      <span class="detail-label">Category:</span>
-      <span class="detail-value">${event.category_name || '-'}</span>
-    </div>
-    <div class="detail-row">
-      <span class="detail-label">Currency:</span>
-      <span class="detail-value">${event.currency || '-'}</span>
-    </div>
-    <div class="detail-row">
-      <span class="detail-label">Status:</span>
-      <span class="detail-value">${event.type === 'sealed' ? 'Sealed (Invite Only & Anonymous)' : 'Open (Public Bidding)'}</span>
-    </div>
-    <div class="detail-row">
-      <span class="detail-label">Auction Start:</span>
-      <span class="detail-value">${
+    <div style="display: flex; flex-direction: column; gap: 12px; align-items: flex-end;">
+      <div style="text-align: right;">
+        <div style="font-size: 0.75rem; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 4px;">Auction Start</div>
+        <div style="font-size: 1rem; font-weight: 600; color: #2563eb;">${
     event.auction_time
       ? new Date(event.auction_time).toLocaleString(undefined, {
           year: 'numeric',
@@ -232,15 +216,22 @@
           timeZoneName: 'short'
         })
       : '-'
-  }</span>
+  }</div>
+      </div>
+      <div style="text-align: right;">
+        <div style="font-size: 0.75rem; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 4px;">Status</div>
+        <div style="font-size: 0.9375rem; font-weight: 600; color: ${event.type === 'sealed' ? '#059669' : '#2563eb'};">${event.type === 'sealed' ? 'Sealed' : 'Open'}</div>
+      </div>
+      <div class="event-actions" style="margin-top: 8px;">
+        <button id="edit-btn" class="btn-edit">Edit Event</button>
+        <button id="delete-btn" class="btn-delete">Delete Event</button>
+      </div>
     </div>
+  </div>
+  <div class="event-details-grid" style="display: block; margin-top: 24px;">
     <div class="detail-row">
-      <span class="detail-label">Support Contact:</span>
-      <span class="detail-value">${event.support_contact || '-'}</span>
-    </div>
-    <div class="detail-row">
-      <span class="detail-label">Bid Manager:</span>
-      <span class="detail-value">${event.bid_manager || '-'}</span>
+      <span class="detail-label">Currency:</span>
+      <span class="detail-value">${event.currency || '-'}</span>
     </div>
     <div class="detail-row">
       <span class="detail-label">Auction Duration:</span>
@@ -253,6 +244,14 @@
     <div class="detail-row">
       <span class="detail-label">Extension Threshold:</span>
       <span class="detail-value">${event.extension_threshold ? event.extension_threshold + ' seconds' : '-'}</span>
+    </div>
+    <div class="detail-row">
+      <span class="detail-label">Support Contact:</span>
+      <span class="detail-value">${event.support_contact || '-'}</span>
+    </div>
+    <div class="detail-row">
+      <span class="detail-label">Bid Manager:</span>
+      <span class="detail-value">${event.bid_manager || '-'}</span>
     </div>
   </div>
   <div class="event-meta">Created: ${new Date(event.created_at).toLocaleString()}</div>
@@ -496,7 +495,7 @@
         managers.sort((a, b) => (a.id === event.created_by ? -1 : b.id === event.created_by ? 1 : 0));
 
         const assignedManagerIds = new Set(
-          members.filter(m => m.role === "manager").map(m => m.user_id)
+          members.filter(m => m.role === "creator" || m.role === "participant").map(m => m.user_id)
         );
 
         managers.forEach(u => {
@@ -559,41 +558,21 @@
       const eventId = params.get('id');
       if (!eventId) return;
 
-      const checkedBidders = new Set(
-        Array.from(document.querySelectorAll(".bidder-assign:checked")).map(cb => parseInt(cb.dataset.userId, 10))
-      );
-      const checkedManagers = new Set(
-        Array.from(document.querySelectorAll(".manager-assign:checked")).map(cb => parseInt(cb.dataset.userId, 10))
-      );
-
-      const beforeBidders = window._currentAssignedBidderIds || new Set();
-      const beforeManagers = window._currentAssignedManagerIds || new Set();
-
-      const toAddBidders = [...checkedBidders].filter(id => !beforeBidders.has(id));
-      const toRemoveBidders = [...beforeBidders].filter(id => !checkedBidders.has(id));
-      const toAddManagers = [...checkedManagers].filter(id => !beforeManagers.has(id));
-      const toRemoveManagers = [...beforeManagers].filter(id => !checkedManagers.has(id));
+      const checkedBidders = Array.from(document.querySelectorAll(".bidder-assign:checked"))
+        .map(cb => parseInt(cb.dataset.userId, 10));
+      
+      const checkedManagers = Array.from(document.querySelectorAll(".manager-assign:checked"))
+        .map(cb => parseInt(cb.dataset.userId, 10));
 
       try {
-        for (const user_id of toAddBidders)
-          await authFetch(`/events/${eventId}/members`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ user_id, role: "bidder" })
-          });
-
-        for (const user_id of toRemoveBidders)
-          await authFetch(`/events/${eventId}/members/${user_id}`, { method: "DELETE" });
-
-        for (const user_id of toAddManagers)
-          await authFetch(`/events/${eventId}/members`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ user_id, role: "manager" })
-          });
-
-        for (const user_id of toRemoveManagers)
-          await authFetch(`/events/${eventId}/members/${user_id}`, { method: "DELETE" });
+        await authFetch(`/events/${eventId}/members`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ 
+            managers: checkedManagers, 
+            bidders: checkedBidders 
+          })
+        });
 
         alert("Member assignments saved successfully.");
         await loadUsersAndMembers(eventId);
