@@ -48,9 +48,12 @@
 
             <div class="form-group">
               <label for="organisation" class="form-label">Organisation</label>
-              <select id="organisation" class="form-select" required>
-                <option value="">Select Organisation</option>
-              </select>
+              <div style="display: flex; gap: 8px; align-items: center;">
+                <select id="organisation" class="form-select" required style="flex: 1;">
+                  <option value="">Select Organisation</option>
+                </select>
+                <button type="button" id="create-org-btn" class="btn-secondary" style="white-space: nowrap; padding: 10px 16px;">+ New Organisation</button>
+              </div>
             </div>
 
             <div class="form-group">
@@ -155,16 +158,21 @@
     const auctionDateEl = document.getElementById('auction-date');
     const auctionTimeEl = document.getElementById('auction-time');
 
+    // Store organisations data for currency lookup
+    let organisationsData = [];
+
     async function fetchOrganisations() {
       try {
         const res = await authFetch('/organisations?type=client');
         if (!res.ok) throw new Error('Failed to load client organisations');
         const organisations = await res.json();
+        organisationsData = organisations; // Store for later use
         orgEl.innerHTML = '<option value=\"\">Select Client Organisation</option>';
         organisations.forEach(org => {
           const option = document.createElement('option');
           option.value = org.id;
           option.textContent = org.name;
+          option.dataset.currency = org.currency || ''; // Store currency in dataset
           orgEl.appendChild(option);
         });
       } catch (err) {
@@ -245,6 +253,19 @@
 
     orgEl.addEventListener('change', async () => {
       await fetchCategories(orgEl.value);
+      
+      // Auto-set currency based on selected organisation
+      if (orgEl.value) {
+        const selectedOrg = organisationsData.find(org => org.id == orgEl.value);
+        if (selectedOrg && selectedOrg.currency) {
+          currencyEl.value = selectedOrg.currency;
+        }
+      }
+    });
+
+    // Create new organisation button
+    document.getElementById('create-org-btn').addEventListener('click', () => {
+      window.location.href = 'orgdetail.html';
     });
 
     window.addEventListener('DOMContentLoaded', async () => {

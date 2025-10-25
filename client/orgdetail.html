@@ -178,12 +178,15 @@
       if (res.ok) {
         alert("✅ Organisation saved successfully!");
         const data = orgId ? { id: orgId } : await res.json();
-        // Stay on the same page for supplier orgs; otherwise redirect to list
         const orgType = document.getElementById("org-type").value;
-        if (orgType === "supplier") {
+        
+        // If creating a new org, stay on the page to allow adding categories/users
+        if (!orgId) {
           window.location.href = `orgdetail.html?id=${data.id}`;
-        } else {
-          window.location.href = "organisations.html";
+        }
+        // If editing, just reload to show updated data
+        else {
+          await loadOrganisation();
         }
       } else {
         alert("❌ Failed to save organisation.");
