@@ -363,7 +363,7 @@ module.exports = (pool) => {
 
   // ---- EXCEL IMPORT ----
 
-  router.post("/lots/:id/line-items/import", upload.single("file"), async (req, res) => {
+  router.post("/lots/:id/line-items/import", ensureAuthenticated, upload.single("file"), async (req, res) => {
     const lotId = req.params.id;
     if (!req.file) return res.status(400).json({ error: "No file uploaded" });
 
@@ -371,13 +371,43 @@ module.exports = (pool) => {
     try {
       await workbook.xlsx.readFile(req.file.path);
       const sheet = workbook.worksheets[0];
+      
+      if (!sheet) {
+        fs.unlinkSync(req.file.path);
+        return res.status(400).json({ error: "No worksheet found in Excel file" });
+      }
+      
       const startRow = 3;
+      let importedCount = 0;
 
       for (let i = startRow; i <= sheet.rowCount; i++) {
         const row = sheet.getRow(i);
         if (!row || !row.getCell(1).value) continue;
 
-        const values = row.values.slice(1, 22);
+        // Extract values from Excel row (matching export format)
+        // Skip the "Extra" column at position 7
+        const item_number = row.getCell(1).value;
+        const item_name = row.getCell(2).value;
+        const group_number = row.getCell(3).value;
+        const description = row.getCell(4).value;
+        const quantity = row.getCell(5).value;
+        const uom = row.getCell(6).value;
+        // cell 7 is "Extra" - skip it
+        const input = row.getCell(8).value;
+        const required = row.getCell(9).value;
+        const ties = row.getCell(10).value;
+        const decimals = row.getCell(11).value;
+        const decrement = row.getCell(12).value;
+        const opening_value = row.getCell(13).value;
+        const baseline = row.getCell(14).value;
+        const ext_quantity = row.getCell(15).value;
+        const ext_baseline = row.getCell(16).value;
+        const reserve_value = row.getCell(17).value;
+        const incumbent = row.getCell(18).value;
+        const weighting_visible = row.getCell(19).value;
+        const opening_visible = row.getCell(20).value;
+        const reserve_visible = row.getCell(21).value;
+
         await pool.query(
           `INSERT INTO line_items (
             lot_id, item_number, item_name, group_number, description, quantity, uom,
@@ -391,15 +421,24 @@ module.exports = (pool) => {
             $14,$15,$16,$17,$18,
             $19,$20,$21
           )`,
-          [lotId, ...values]
+          [
+            lotId, item_number, item_name, group_number, description, quantity, uom,
+            input, required, ties, decimals, decrement, opening_value,
+            baseline, ext_quantity, ext_baseline, reserve_value, incumbent,
+            weighting_visible, opening_visible, reserve_visible
+          ]
         );
+        importedCount++;
       }
 
       fs.unlinkSync(req.file.path);
-      res.json({ success: true, message: "✅ Excel imported successfully" });
+      res.json({ success: true, message: `✅ Excel imported successfully (${importedCount} items)` });
     } catch (err) {
       console.error("Error importing Excel:", err);
-      res.status(500).json({ error: "Failed to import Excel" });
+      if (req.file && fs.existsSync(req.file.path)) {
+        fs.unlinkSync(req.file.path);
+      }
+      res.status(500).json({ error: "Failed to import Excel: " + err.message });
     }
   });
 

@@ -695,14 +695,31 @@
     async function importExcel(event) {
       const file = event.target.files[0];
       if (!file) return;
-      const formData = new FormData();
-      formData.append("file", file);
-      await authFetch(`/lots/${lotId}/line-items/import`, {
-        method: "POST",
-        body: formData
-      });
-      alert("✅ Excel imported successfully!");
-      loadLineItems();
+      
+      try {
+        const formData = new FormData();
+        formData.append("file", file);
+        
+        const response = await authFetch(`/lots/${lotId}/line-items/import`, {
+          method: "POST",
+          body: formData
+        });
+        
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+          throw new Error(errorData.error || `Import failed with status ${response.status}`);
+        }
+        
+        const result = await response.json();
+        alert("✅ Excel imported successfully!");
+        loadLineItems();
+      } catch (error) {
+        console.error("Import error:", error);
+        alert("❌ Failed to import Excel file: " + error.message);
+      } finally {
+        // Clear the file input so the same file can be selected again
+        event.target.value = '';
+      }
     }
 
     (async () => {
