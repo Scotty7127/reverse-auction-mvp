@@ -21,6 +21,11 @@
       border-radius: 8px;
       box-shadow: 0 2px 5px rgba(0,0,0,0.1);
     }
+    #page-title {
+      margin-bottom: 20px;
+      color: #333;
+      font-size: 1.8rem;
+    }
     form {
       display: flex;
       flex-direction: column;
@@ -65,6 +70,7 @@
   </nav>
 
   <main>
+    <h1 id="page-title">Create Lot</h1>
     <form id="lot-form">
       <label for="lot-title">Lot Title:</label>
       <input type="text" id="lot-title" required />
@@ -100,15 +106,19 @@
       submitBtn.textContent = 'Save Changes';
 
       try {
-        const res = await authFetch(`/events/${eventId}/lots`);
-        const lots = await res.json();
-        const lot = lots.find(l => l.id == lotId);
-        if (!lot) return alert('Lot not found');
-
+        const res = await authFetch(`/lots/${lotId}`);
+        if (!res.ok) {
+          alert('Lot not found');
+          window.location.href = `event.html?id=${eventId}`;
+          return;
+        }
+        
+        const lot = await res.json();
         titleEl.value = lot.title;
         descEl.value = lot.description || '';
       } catch (err) {
         console.error('Error loading lot:', err);
+        alert('Error loading lot details');
       }
     }
 
