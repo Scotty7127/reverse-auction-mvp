@@ -1,6 +1,7 @@
 // routes/route-events.js
 const express = require("express");
 const { ensureAuthenticated } = require("../middleware/auth");
+const { checkTeamMembership } = require("../middleware/team-access");
 const pool = require("../db/pool");
 const jwt = require("jsonwebtoken");
 
@@ -128,21 +129,51 @@ module.exports = (io) => {
 
   // === Pause & Resume Auctions ===
   router.patch("/events/:id/pause", ensureAuthenticated, async (req, res) => {
-    if (req.user.role !== "manager") {
-      return res.status(403).json({ error: "Only managers can pause auctions" });
+    try {
+      if (req.user.role !== "manager") {
+        return res.status(403).json({ error: "Only managers can pause auctions" });
+      }
+
+      const eventId = req.params.id;
+      const userId = req.user.id;
+
+      // Check if the manager is a team member of this event
+      const isMember = await checkTeamMembership(eventId, userId);
+      if (!isMember) {
+        return res.status(403).json({ error: "You are not a team member of this event" });
+      }
+
+      await pool.query("UPDATE events SET type = 'paused' WHERE id=$1", [eventId]);
+      io.to(`event_${eventId}`).emit("auction_paused");
+      res.json({ success: true });
+    } catch (err) {
+      console.error("Error pausing auction:", err);
+      res.status(500).json({ error: "Failed to pause auction" });
     }
-    await pool.query("UPDATE events SET type = 'paused' WHERE id=$1", [req.params.id]);
-    io.to(`event_${req.params.id}`).emit("auction_paused");
-    res.json({ success: true });
   });
 
   router.patch("/events/:id/resume", ensureAuthenticated, async (req, res) => {
-    if (req.user.role !== "manager") {
-      return res.status(403).json({ error: "Only managers can resume auctions" });
+    try {
+      if (req.user.role !== "manager") {
+        return res.status(403).json({ error: "Only managers can resume auctions" });
+      }
+
+      const eventId = req.params.id;
+      const userId = req.user.id;
+
+      // Check if the manager is a team member of this event
+      const isMember = await checkTeamMembership(eventId, userId);
+      if (!isMember) {
+        return res.status(403).json({ error: "You are not a team member of this event" });
+      }
+
+      await pool.query("UPDATE events SET type = 'open' WHERE id=$1", [eventId]);
+      io.to(`event_${eventId}`).emit("auction_resumed");
+      res.json({ success: true });
+    } catch (err) {
+      console.error("Error resuming auction:", err);
+      res.status(500).json({ error: "Failed to resume auction" });
     }
-    await pool.query("UPDATE events SET type = 'open' WHERE id=$1", [req.params.id]);
-    io.to(`event_${req.params.id}`).emit("auction_resumed");
-    res.json({ success: true });
   });
 
   // === Create Event ===
@@ -172,32 +203,53 @@ module.exports = (io) => {
       const extensionTimeInterval = normalizeInterval(extension_time, "seconds");
       const extensionThresholdInterval = normalizeInterval(extension_threshold, "seconds");
 
-      const result = await pool.query(
-        `INSERT INTO events (title, description, organisation_id, category_id, currency, support_contact, support_contact_country_code, support_contact_phone, bid_manager_name, bid_manager, bid_manager_country_code, bid_manager_phone, created_by, auction_time, type, auction_duration, extension_time, extension_threshold)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
-         RETURNING *`,
-        [
-          title,
-          description,
-          organisation_id,
-          category_id,
-          currency,
-          support_contact,
-          support_contact_country_code,
-          support_contact_phone,
-          bid_manager_name,
-          bid_manager,
-          bid_manager_country_code,
-          bid_manager_phone,
-          created_by,
-          auction_time,
-          type || "open",
-          auctionDurationInterval,
-          extensionTimeInterval,
-          extensionThresholdInterval,
-        ]
-      );
-      res.json(result.rows[0]);
+      // Use a transaction to create event and add creator as team member
+      const client = await pool.connect();
+      try {
+        await client.query("BEGIN");
+
+        const result = await client.query(
+          `INSERT INTO events (title, description, organisation_id, category_id, currency, support_contact, support_contact_country_code, support_contact_phone, bid_manager_name, bid_manager, bid_manager_country_code, bid_manager_phone, created_by, auction_time, type, auction_duration, extension_time, extension_threshold)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
+           RETURNING *`,
+          [
+            title,
+            description,
+            organisation_id,
+            category_id,
+            currency,
+            support_contact,
+            support_contact_country_code,
+            support_contact_phone,
+            bid_manager_name,
+            bid_manager,
+            bid_manager_country_code,
+            bid_manager_phone,
+            created_by,
+            auction_time,
+            type || "open",
+            auctionDurationInterval,
+            extensionTimeInterval,
+            extensionThresholdInterval,
+          ]
+        );
+
+        const event = result.rows[0];
+
+        // Add creator as team member with 'creator' role
+        await client.query(
+          `INSERT INTO event_members (event_id, user_id, role) VALUES ($1, $2, $3)`,
+          [event.id, created_by, "creator"]
+        );
+
+        await client.query("COMMIT");
+        res.json(event);
+      } catch (err) {
+        await client.query("ROLLBACK");
+        throw err;
+      } finally {
+        client.release();
+      }
     } catch (err) {
       console.error("Error creating event:", err);
       res.status(500).json({ error: err.message });
@@ -209,6 +261,15 @@ module.exports = (io) => {
     try {
       if (req.user.role !== "manager") {
         return res.status(403).json({ error: "Only managers can update events" });
+      }
+
+      const eventId = req.params.id;
+      const userId = req.user.id;
+
+      // Check if the manager is a team member of this event
+      const isMember = await checkTeamMembership(eventId, userId);
+      if (!isMember) {
+        return res.status(403).json({ error: "You are not a team member of this event" });
       }
 
       const {
@@ -274,7 +335,7 @@ module.exports = (io) => {
           auctionDurationInterval,
           extensionTimeInterval,
           extensionThresholdInterval,
-          req.params.id,
+          eventId,
         ]
       );
 
@@ -292,18 +353,47 @@ module.exports = (io) => {
   // === Get All Events ===
   router.get("/events", ensureAuthenticated, async (req, res) => {
     try {
-      const result = await pool.query(`
-        SELECT e.*, 
-               o.name AS organisation_name, 
-               c.name AS category_name,
-               ROUND(EXTRACT(EPOCH FROM e.auction_duration) / 60)::int AS auction_duration,
-               ROUND(EXTRACT(EPOCH FROM e.extension_time))::int AS extension_time,
-               ROUND(EXTRACT(EPOCH FROM e.extension_threshold))::int AS extension_threshold
-        FROM events e
-        LEFT JOIN organisations o ON e.organisation_id = o.id
-        LEFT JOIN categories c ON e.category_id = c.id
-        ORDER BY e.auction_time ASC NULLS LAST, e.created_at DESC
-      `);
+      const userId = req.user.id;
+      const userRole = req.user.role;
+
+      let query;
+      let params;
+
+      if (userRole === "manager") {
+        // For managers, only return events where they are a team member (creator or participant)
+        query = `
+          SELECT DISTINCT e.*, 
+                 o.name AS organisation_name, 
+                 c.name AS category_name,
+                 ROUND(EXTRACT(EPOCH FROM e.auction_duration) / 60)::int AS auction_duration,
+                 ROUND(EXTRACT(EPOCH FROM e.extension_time))::int AS extension_time,
+                 ROUND(EXTRACT(EPOCH FROM e.extension_threshold))::int AS extension_threshold
+          FROM events e
+          LEFT JOIN organisations o ON e.organisation_id = o.id
+          LEFT JOIN categories c ON e.category_id = c.id
+          INNER JOIN event_members em ON e.id = em.event_id
+          WHERE em.user_id = $1 AND em.role IN ('creator', 'participant')
+          ORDER BY e.auction_time ASC NULLS LAST, e.created_at DESC
+        `;
+        params = [userId];
+      } else {
+        // For bidders, return all events (or filter as needed)
+        query = `
+          SELECT e.*, 
+                 o.name AS organisation_name, 
+                 c.name AS category_name,
+                 ROUND(EXTRACT(EPOCH FROM e.auction_duration) / 60)::int AS auction_duration,
+                 ROUND(EXTRACT(EPOCH FROM e.extension_time))::int AS extension_time,
+                 ROUND(EXTRACT(EPOCH FROM e.extension_threshold))::int AS extension_threshold
+          FROM events e
+          LEFT JOIN organisations o ON e.organisation_id = o.id
+          LEFT JOIN categories c ON e.category_id = c.id
+          ORDER BY e.auction_time ASC NULLS LAST, e.created_at DESC
+        `;
+        params = [];
+      }
+
+      const result = await pool.query(query, params);
       res.json(result.rows);
     } catch (err) {
       console.error("Error fetching events:", err);
@@ -346,7 +436,17 @@ module.exports = (io) => {
       if (req.user.role !== "manager") {
         return res.status(403).json({ error: "Not authorized" });
       }
-      await pool.query("UPDATE events SET reveal_bidders = TRUE WHERE id=$1", [req.params.id]);
+
+      const eventId = req.params.id;
+      const userId = req.user.id;
+
+      // Check if the manager is a team member of this event
+      const isMember = await checkTeamMembership(eventId, userId);
+      if (!isMember) {
+        return res.status(403).json({ error: "You are not a team member of this event" });
+      }
+
+      await pool.query("UPDATE events SET reveal_bidders = TRUE WHERE id=$1", [eventId]);
       res.json({ success: true, message: "Bidders revealed for this event." });
     } catch (err) {
       console.error("Error revealing bidders:", err);
@@ -507,6 +607,14 @@ module.exports = (io) => {
       }
 
       const eventId = req.params.id;
+      const userId = req.user.id;
+
+      // Check if the manager is a team member of this event
+      const isMember = await checkTeamMembership(eventId, userId);
+      if (!isMember) {
+        return res.status(403).json({ error: "You are not a team member of this event" });
+      }
+
       const { managers = [], bidders = [] } = req.body;
 
       // Start a transaction
@@ -565,10 +673,17 @@ module.exports = (io) => {
   router.delete("/events/:id", ensureAuthenticated, async (req, res) => {
     try {
       const eventId = req.params.id;
+      const userId = req.user.id;
 
       // Only allow managers to delete events
       if (req.user.role !== "manager") {
         return res.status(403).json({ error: "Only managers can delete events" });
+      }
+
+      // Check if the manager is a team member of this event
+      const isMember = await checkTeamMembership(eventId, userId);
+      if (!isMember) {
+        return res.status(403).json({ error: "You are not a team member of this event" });
       }
 
       await pool.query("DELETE FROM events WHERE id = $1", [eventId]);

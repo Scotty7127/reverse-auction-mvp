@@ -36,7 +36,7 @@
     <div class="tab" data-tab="lots">Lots</div>
     <div class="tab" data-tab="lines">All Line Items</div>
     <div class="tab" data-tab="members">Members</div>
-    <div class="tab" data-tab="docs">RFQ</div>
+    <div class="tab" data-tab="docs">Documents</div>
     <div class="tab active" data-tab="pricing">Pricing</div>
   </div>
 
@@ -534,6 +534,11 @@
           const tabName = tab.dataset.tab;
           if (tabName === "pricing") {
             // Already on pricing page, do nothing
+            return;
+          }
+          if (tabName === "docs") {
+            // Navigate to docs.html
+            window.location.href = `docs.html?event_id=${eventId}`;
             return;
           }
           // Navigate to event.html with the selected tab

@@ -112,28 +112,23 @@
       try {
         const res = await authFetch('/events');
         const events = await res.json();
-        const user = JSON.parse(localStorage.getItem("user"));
         const container = document.getElementById('upcoming-events');
 
         const now = new Date();
         
-        const relevantEvents = events.filter(evt => {
-          // Filter for events the user is involved in
-          const isRelevant = evt.created_by === user.id ||
-            (evt.members && evt.members.some(m => m.user_id === user.id));
-          
-          // Filter out past events (only show upcoming)
+        // Filter out past events (only show upcoming)
+        // Backend already filters by team membership for managers
+        const upcomingEvents = events.filter(evt => {
           const isPast = evt.auction_time && new Date(evt.auction_time) < now;
-          
-          return isRelevant && !isPast;
+          return !isPast;
         });
 
-        if (relevantEvents.length === 0) {
+        if (upcomingEvents.length === 0) {
           container.innerHTML = '<p class="text-muted">No upcoming events found.</p>';
           return;
         }
 
-        container.innerHTML = relevantEvents.map(evt => {
+        container.innerHTML = upcomingEvents.map(evt => {
           const orgName = evt.organisation_name || 'Unnamed Organisation';
           const catName = evt.category_name || 'No Category';
           const displayTitle = `${orgName} - ${catName}`;
