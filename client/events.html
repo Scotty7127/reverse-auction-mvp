@@ -209,7 +209,31 @@
         console.error('Error fetching events:', err);
       }
     }
-loadEvents()
+loadEvents();
+
+// Check URL parameters to activate specific tab
+document.addEventListener('DOMContentLoaded', () => {
+  const params = new URLSearchParams(window.location.search);
+  const tab = params.get('tab');
+  
+  if (tab === 'past') {
+    // Activate the past events tab
+    const pastTabButton = document.getElementById('past-tab');
+    const upcomingTabButton = document.getElementById('upcoming-tab');
+    const pastTabPane = document.getElementById('past');
+    const upcomingTabPane = document.getElementById('upcoming');
+    
+    if (pastTabButton && pastTabPane) {
+      upcomingTabButton.classList.remove('active');
+      upcomingTabButton.setAttribute('aria-selected', 'false');
+      upcomingTabPane.classList.remove('show', 'active');
+      
+      pastTabButton.classList.add('active');
+      pastTabButton.setAttribute('aria-selected', 'true');
+      pastTabPane.classList.add('show', 'active');
+    }
+  }
+});
 </script>
   <!-- Socket.IO client -->
   <script src="/socket.io/socket.io.js"></script>

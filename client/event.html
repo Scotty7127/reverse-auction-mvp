@@ -86,47 +86,7 @@
       </div>
     </section>
 
-    <section id="docs" class="tab-content">
-      <h2>RFQ Management</h2>
-      <div class="rfq-card">
-        <div class="card-header-custom">
-          <h4 class="card-title">Information / Email Content</h4>
-        </div>
-        <div class="card-content">
-          <textarea id="rfq-info" class="rfq-textarea" rows="6" placeholder="Write the email content that will be sent to bidders..."></textarea>
-        </div>
-      </div>
-      
-      <div class="rfq-card">
-        <div class="card-header-custom">
-          <h4 class="card-title">Schedule</h4>
-        </div>
-        <div class="card-content">
-          <div class="form-grid">
-            <div class="form-group">
-              <label class="form-label">Publish Date & Time:</label>
-              <input type="datetime-local" id="rfq-publish" class="form-input" />
-            </div>
-            <div class="form-group">
-              <label class="form-label">Deadline for Responses:</label>
-              <input type="datetime-local" id="rfq-deadline" class="form-input" />
-            </div>
-            <div class="form-group">
-              <label class="form-label">Reminder Time:</label>
-              <input type="datetime-local" id="rfq-reminder" class="form-input" />
-              <small class="form-hint">Defaults to 1 day before deadline</small>
-            </div>
-          </div>
-          <div class="rfq-actions">
-            <button id="save-rfq-btn" class="btn-secondary">Save Draft</button>
-            <button id="publish-rfq-btn" class="btn-primary">Publish Now</button>
-          </div>
-        </div>
-      </div>
-      <div id="rfq-status"></div>
-    </section>
-
-    <!-- Pricing section removed -->
+    <!-- RFQ and Pricing sections moved to separate pages -->
     </div>
   </main>
 
@@ -138,10 +98,15 @@
     tabs.forEach(tab => {
       tab.addEventListener('click', () => {
         const tabName = tab.dataset.tab;
+        const params = new URLSearchParams(window.location.search);
+        const eventId = params.get("id");
+        
         if (tabName === "pricing") {
-          const params = new URLSearchParams(window.location.search);
-          const eventId = params.get("id");
           window.location.href = `auction.html?event_id=${eventId}`;
+          return;
+        }
+        if (tabName === "docs") {
+          window.location.href = `docs.html?event_id=${eventId}`;
           return;
         }
         tabs.forEach(t => t.classList.remove('active'));

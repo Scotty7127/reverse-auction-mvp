@@ -44,8 +44,21 @@
       <div class="dashboard-grid">
         <!-- Upcoming Events -->
         <div class="upcoming-events-card">
-          <div class="card-header-custom">
+          <div class="card-header-custom" style="display: flex; justify-content: space-between; align-items: center;">
             <h3 class="card-title">Your Upcoming Events</h3>
+            <button class="btn-view-past" onclick="viewPastEvents()" style="
+              padding: 8px 16px;
+              font-size: 0.875rem;
+              font-weight: 500;
+              color: #2563eb;
+              background: white;
+              border: 1px solid #2563eb;
+              border-radius: 6px;
+              cursor: pointer;
+              transition: all 0.2s ease;
+            " onmouseover="this.style.background='#2563eb'; this.style.color='white';" onmouseout="this.style.background='white'; this.style.color='#2563eb';">
+              View Past Events
+            </button>
           </div>
           <div class="card-content">
             <div id="upcoming-events">
@@ -90,6 +103,11 @@
     }
   </script>
   <script>
+    function viewPastEvents() {
+      // Navigate to events.html with a hash to indicate the past tab should be active
+      window.location.href = 'events.html?tab=past';
+    }
+
     async function loadUpcomingEvents() {
       try {
         const res = await authFetch('/events');
@@ -97,10 +115,18 @@
         const user = JSON.parse(localStorage.getItem("user"));
         const container = document.getElementById('upcoming-events');
 
-        const relevantEvents = events.filter(evt =>
-          evt.created_by === user.id ||
-          (evt.members && evt.members.some(m => m.user_id === user.id))
-        );
+        const now = new Date();
+        
+        const relevantEvents = events.filter(evt => {
+          // Filter for events the user is involved in
+          const isRelevant = evt.created_by === user.id ||
+            (evt.members && evt.members.some(m => m.user_id === user.id));
+          
+          // Filter out past events (only show upcoming)
+          const isPast = evt.auction_time && new Date(evt.auction_time) < now;
+          
+          return isRelevant && !isPast;
+        });
 
         if (relevantEvents.length === 0) {
           container.innerHTML = '<p class="text-muted">No upcoming events found.</p>';
