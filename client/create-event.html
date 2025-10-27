@@ -58,9 +58,12 @@
 
             <div class="form-group">
               <label for="category" class="form-label">Category</label>
-              <select id="category" class="form-select" required>
-                <option value="">Select Category</option>
-              </select>
+              <div style="display: flex; gap: 8px; align-items: center;">
+                <select id="category" class="form-select" required style="flex: 1;">
+                  <option value="">Select Category</option>
+                </select>
+                <button type="button" id="create-category-btn" class="btn-secondary" style="white-space: nowrap; padding: 10px 16px; display: none;">+ New Category</button>
+              </div>
             </div>
 
             <div class="form-group">
@@ -139,6 +142,27 @@
           <button type="button" class="btn-secondary" onclick="window.location.href='events.html'">Cancel</button>
         </div>
       </form>
+    </div>
+
+    <!-- Modal for creating new category -->
+    <div id="category-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center;">
+      <div style="background: white; padding: 24px; border-radius: 8px; max-width: 500px; width: 90%;">
+        <h3 style="margin-top: 0;">Create New Category</h3>
+        <form id="new-category-form">
+          <div class="form-group">
+            <label for="new-category-name" class="form-label">Category Name</label>
+            <input type="text" id="new-category-name" class="form-input" required>
+          </div>
+          <div class="form-group">
+            <label for="new-category-description" class="form-label">Description</label>
+            <input type="text" id="new-category-description" class="form-input" required>
+          </div>
+          <div style="display: flex; gap: 8px; margin-top: 20px;">
+            <button type="submit" class="btn-primary">Add Category</button>
+            <button type="button" class="btn-secondary" onclick="closeCategoryModal()">Cancel</button>
+          </div>
+        </form>
+      </div>
     </div>
   </div>
 
@@ -254,6 +278,14 @@
     orgEl.addEventListener('change', async () => {
       await fetchCategories(orgEl.value);
       
+      // Show/hide the "New Category" button based on organisation selection
+      const createCategoryBtn = document.getElementById('create-category-btn');
+      if (orgEl.value) {
+        createCategoryBtn.style.display = 'block';
+      } else {
+        createCategoryBtn.style.display = 'none';
+      }
+      
       // Auto-set currency based on selected organisation
       if (orgEl.value) {
         const selectedOrg = organisationsData.find(org => org.id == orgEl.value);
@@ -266,6 +298,64 @@
     // Create new organisation button
     document.getElementById('create-org-btn').addEventListener('click', () => {
       window.location.href = 'orgdetail.html';
+    });
+
+    // Create new category button
+    document.getElementById('create-category-btn').addEventListener('click', () => {
+      openCategoryModal();
+    });
+
+    // Functions to handle category modal
+    function openCategoryModal() {
+      document.getElementById('category-modal').style.display = 'flex';
+      document.getElementById('new-category-name').value = '';
+      document.getElementById('new-category-description').value = '';
+    }
+
+    function closeCategoryModal() {
+      document.getElementById('category-modal').style.display = 'none';
+    }
+
+    // Handle new category form submission
+    document.getElementById('new-category-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      
+      const selectedOrgId = orgEl.value;
+      if (!selectedOrgId) {
+        alert('Please select an organisation first');
+        return;
+      }
+
+      const name = document.getElementById('new-category-name').value.trim();
+      const description = document.getElementById('new-category-description').value.trim();
+
+      if (!name || !description) {
+        alert('Please provide both name and description for the category.');
+        return;
+      }
+
+      try {
+        const res = await authFetch(`/organisations/${selectedOrgId}/categories`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name, description })
+        });
+
+        if (res.ok) {
+          const newCategory = await res.json();
+          alert('✅ Category created successfully!');
+          closeCategoryModal();
+          
+          // Refresh categories and select the newly created one
+          await fetchCategories(selectedOrgId);
+          catEl.value = newCategory.id;
+        } else {
+          const err = await res.json();
+          alert('Error creating category: ' + (err.error || res.statusText));
+        }
+      } catch (err) {
+        alert('Failed to create category: ' + err.message);
+      }
     });
 
     window.addEventListener('DOMContentLoaded', async () => {
