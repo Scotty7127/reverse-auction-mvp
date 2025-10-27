@@ -67,7 +67,12 @@ async function runMigrations() {
         category_id INTEGER REFERENCES categories(id) ON DELETE CASCADE,
         currency TEXT,
         support_contact TEXT,
+        support_contact_country_code TEXT,
+        support_contact_phone TEXT,
+        bid_manager_name TEXT,
         bid_manager TEXT,
+        bid_manager_country_code TEXT,
+        bid_manager_phone TEXT,
         created_by INT REFERENCES users(id) ON DELETE SET NULL,
         auction_time TIMESTAMP,
         type VARCHAR(10) DEFAULT 'open',
@@ -80,6 +85,16 @@ async function runMigrations() {
         is_paused BOOLEAN DEFAULT false,
         created_at TIMESTAMP DEFAULT NOW()
       );
+    `);
+
+    // Add new columns if they don't exist (for existing databases)
+    await pool.query(`
+      ALTER TABLE events
+      ADD COLUMN IF NOT EXISTS support_contact_country_code TEXT,
+      ADD COLUMN IF NOT EXISTS support_contact_phone TEXT,
+      ADD COLUMN IF NOT EXISTS bid_manager_name TEXT,
+      ADD COLUMN IF NOT EXISTS bid_manager_country_code TEXT,
+      ADD COLUMN IF NOT EXISTS bid_manager_phone TEXT;
     `);
 
     // === INVITATIONS ===

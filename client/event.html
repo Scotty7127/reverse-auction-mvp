@@ -212,11 +212,18 @@
     </div>
     <div class="detail-row">
       <span class="detail-label">Support Contact:</span>
-      <span class="detail-value">${event.support_contact || '-'}</span>
+      <span class="detail-value">
+        ${event.support_contact || '-'}
+        ${event.support_contact_phone ? `<br>${event.support_contact_country_code || ''} ${event.support_contact_phone}` : ''}
+      </span>
     </div>
     <div class="detail-row">
       <span class="detail-label">Bid Manager:</span>
-      <span class="detail-value">${event.bid_manager || '-'}</span>
+      <span class="detail-value">
+        ${event.bid_manager_name ? event.bid_manager_name : '-'}
+        ${event.bid_manager ? `<br>${event.bid_manager}` : ''}
+        ${event.bid_manager_phone ? `<br>${event.bid_manager_country_code || ''} ${event.bid_manager_phone}` : ''}
+      </span>
     </div>
   </div>
   <div class="event-meta">Created: ${new Date(event.created_at).toLocaleString()}</div>

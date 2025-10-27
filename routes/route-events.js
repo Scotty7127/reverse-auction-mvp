@@ -155,7 +155,12 @@ module.exports = (io) => {
         category_id,
         currency,
         support_contact,
+        support_contact_country_code,
+        support_contact_phone,
+        bid_manager_name,
         bid_manager,
+        bid_manager_country_code,
+        bid_manager_phone,
         auction_time,
         type,
         auction_duration,
@@ -168,8 +173,8 @@ module.exports = (io) => {
       const extensionThresholdInterval = normalizeInterval(extension_threshold, "seconds");
 
       const result = await pool.query(
-        `INSERT INTO events (title, description, organisation_id, category_id, currency, support_contact, bid_manager, created_by, auction_time, type, auction_duration, extension_time, extension_threshold)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+        `INSERT INTO events (title, description, organisation_id, category_id, currency, support_contact, support_contact_country_code, support_contact_phone, bid_manager_name, bid_manager, bid_manager_country_code, bid_manager_phone, created_by, auction_time, type, auction_duration, extension_time, extension_threshold)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
          RETURNING *`,
         [
           title,
@@ -178,7 +183,12 @@ module.exports = (io) => {
           category_id,
           currency,
           support_contact,
+          support_contact_country_code,
+          support_contact_phone,
+          bid_manager_name,
           bid_manager,
+          bid_manager_country_code,
+          bid_manager_phone,
           created_by,
           auction_time,
           type || "open",
@@ -208,7 +218,12 @@ module.exports = (io) => {
         category_id,
         currency,
         support_contact,
+        support_contact_country_code,
+        support_contact_phone,
+        bid_manager_name,
         bid_manager,
+        bid_manager_country_code,
+        bid_manager_phone,
         auction_time,
         type,
         auction_duration,
@@ -228,13 +243,18 @@ module.exports = (io) => {
              category_id = $4, 
              currency = $5, 
              support_contact = $6, 
-             bid_manager = $7, 
-             auction_time = $8, 
-             type = $9,
-             auction_duration = $10,
-             extension_time = $11,
-             extension_threshold = $12
-         WHERE id = $13
+             support_contact_country_code = $7,
+             support_contact_phone = $8,
+             bid_manager_name = $9,
+             bid_manager = $10, 
+             bid_manager_country_code = $11,
+             bid_manager_phone = $12,
+             auction_time = $13, 
+             type = $14,
+             auction_duration = $15,
+             extension_time = $16,
+             extension_threshold = $17
+         WHERE id = $18
          RETURNING *`,
         [
           title,
@@ -243,7 +263,12 @@ module.exports = (io) => {
           category_id,
           currency,
           support_contact,
+          support_contact_country_code,
+          support_contact_phone,
+          bid_manager_name,
           bid_manager,
+          bid_manager_country_code,
+          bid_manager_phone,
           auction_time,
           type || "open",
           auctionDurationInterval,

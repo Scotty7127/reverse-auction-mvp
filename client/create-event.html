@@ -81,18 +81,76 @@
             </div>
           </div>
 
-          <!-- Contact Information -->
+          <!-- Support Contact -->
           <div class="form-section">
-            <h3 class="section-title">Contact Information</h3>
+            <h3 class="section-title">Support Contact</h3>
             
             <div class="form-group">
-              <label for="support-contact" class="form-label">Support Contact</label>
-              <input type="text" id="support-contact" class="form-input" placeholder="e.g. support@company.com">
+              <label for="support-contact" class="form-label">Email</label>
+              <input type="email" id="support-contact" class="form-input" placeholder="e.g. support@company.com">
             </div>
 
             <div class="form-group">
-              <label for="bid-manager" class="form-label">Bid Manager Contact</label>
-              <input type="text" id="bid-manager" class="form-input" placeholder="e.g. jane@company.com">
+              <label for="support-contact-phone" class="form-label">Phone</label>
+              <div style="display: flex; gap: 8px;">
+                <select id="support-contact-country-code" class="form-select" style="max-width: 120px;">
+                  <option value="+44">UK +44</option>
+                  <option value="+1">US +1</option>
+                  <option value="+353">IE +353</option>
+                  <option value="+33">FR +33</option>
+                  <option value="+49">DE +49</option>
+                  <option value="+39">IT +39</option>
+                  <option value="+34">ES +34</option>
+                  <option value="+31">NL +31</option>
+                  <option value="+32">BE +32</option>
+                  <option value="+41">CH +41</option>
+                  <option value="+61">AU +61</option>
+                  <option value="+64">NZ +64</option>
+                  <option value="+81">JP +81</option>
+                  <option value="+86">CN +86</option>
+                  <option value="+91">IN +91</option>
+                </select>
+                <input type="tel" id="support-contact-phone" class="form-input" placeholder="e.g. 1234567890" style="flex: 1;">
+              </div>
+            </div>
+          </div>
+
+          <!-- Bid Manager Contact -->
+          <div class="form-section">
+            <h3 class="section-title">Bid Manager Contact</h3>
+            
+            <div class="form-group">
+              <label for="bid-manager-name" class="form-label">Name</label>
+              <input type="text" id="bid-manager-name" class="form-input" placeholder="e.g. Jane Smith">
+            </div>
+
+            <div class="form-group">
+              <label for="bid-manager" class="form-label">Email</label>
+              <input type="email" id="bid-manager" class="form-input" placeholder="e.g. jane@company.com">
+            </div>
+
+            <div class="form-group">
+              <label for="bid-manager-phone" class="form-label">Phone</label>
+              <div style="display: flex; gap: 8px;">
+                <select id="bid-manager-country-code" class="form-select" style="max-width: 120px;">
+                  <option value="+44">UK +44</option>
+                  <option value="+1">US +1</option>
+                  <option value="+353">IE +353</option>
+                  <option value="+33">FR +33</option>
+                  <option value="+49">DE +49</option>
+                  <option value="+39">IT +39</option>
+                  <option value="+34">ES +34</option>
+                  <option value="+31">NL +31</option>
+                  <option value="+32">BE +32</option>
+                  <option value="+41">CH +41</option>
+                  <option value="+61">AU +61</option>
+                  <option value="+64">NZ +64</option>
+                  <option value="+81">JP +81</option>
+                  <option value="+86">CN +86</option>
+                  <option value="+91">IN +91</option>
+                </select>
+                <input type="tel" id="bid-manager-phone" class="form-input" placeholder="e.g. 1234567890" style="flex: 1;">
+              </div>
             </div>
           </div>
 
@@ -175,7 +233,12 @@
     const catEl = document.getElementById('category');
     const currencyEl = document.getElementById('currency');
     const supportEl = document.getElementById('support-contact');
+    const supportCountryCodeEl = document.getElementById('support-contact-country-code');
+    const supportPhoneEl = document.getElementById('support-contact-phone');
+    const bidManagerNameEl = document.getElementById('bid-manager-name');
     const managerEl = document.getElementById('bid-manager');
+    const managerCountryCodeEl = document.getElementById('bid-manager-country-code');
+    const managerPhoneEl = document.getElementById('bid-manager-phone');
     const descEl = document.getElementById('description');
     const pageTitle = document.getElementById('page-title');
     const submitBtn = form.querySelector('button[type="submit"]');
@@ -239,8 +302,13 @@
         await fetchCategories(event.organisation_id);
         catEl.value = event.category_id;
         currencyEl.value = event.currency;
-        supportEl.value = event.support_contact;
-        managerEl.value = event.bid_manager;
+        supportEl.value = event.support_contact || '';
+        supportCountryCodeEl.value = event.support_contact_country_code || '+44';
+        supportPhoneEl.value = event.support_contact_phone || '';
+        bidManagerNameEl.value = event.bid_manager_name || '';
+        managerEl.value = event.bid_manager || '';
+        managerCountryCodeEl.value = event.bid_manager_country_code || '+44';
+        managerPhoneEl.value = event.bid_manager_phone || '';
         descEl.value = event.description;
         const sealedCheckbox = document.getElementById('sealed');
         sealedCheckbox.checked = event.type === 'sealed';
@@ -386,7 +454,12 @@
         category_id: parseInt(catEl.value),
         currency: currencyEl.value,
         support_contact: supportEl.value || '',
+        support_contact_country_code: supportCountryCodeEl.value || '',
+        support_contact_phone: supportPhoneEl.value || '',
+        bid_manager_name: bidManagerNameEl.value || '',
         bid_manager: managerEl.value || '',
+        bid_manager_country_code: managerCountryCodeEl.value || '',
+        bid_manager_phone: managerPhoneEl.value || '',
         auction_duration: Number(document.getElementById('auction-duration').value),
         extension_time: Number(document.getElementById('extension-time').value),
         extension_threshold: Number(document.getElementById('extension-threshold').value),
