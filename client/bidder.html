@@ -45,6 +45,18 @@
           </div>
         </div>
 
+        <!-- Pending Tasks -->
+        <div class="quick-actions-card" id="tasks-card" style="display: none;">
+          <div class="card-header-custom" style="background: #fff3cd; border-bottom: 2px solid #ffc107;">
+            <h4 class="card-title" style="color: #856404;">⚠️ Action Required</h4>
+          </div>
+          <div class="card-content">
+            <div id="pending-tasks">
+              <p class="loading-text">Loading tasks...</p>
+            </div>
+          </div>
+        </div>
+
         <!-- Next Auction -->
         <div class="quick-actions-card">
           <div class="card-header-custom">
@@ -66,6 +78,83 @@
   </footer>
 
   <script>
+    async function loadPendingTasks() {
+      const token = localStorage.getItem("token");
+      if (!token) return;
+
+      try {
+        // Get user info
+        const meRes = await authFetch(`/users/me`);
+        if (!meRes.ok) return;
+        const me = await meRes.json();
+        const userId = me.id;
+
+        // Get bidder's events
+        const eventsRes = await authFetch(`/bidders/${userId}/events`);
+        const events = await eventsRes.json();
+
+        if (!events.length) return;
+
+        const tasksContainer = document.getElementById("pending-tasks");
+        const tasksCard = document.getElementById("tasks-card");
+        let pendingTasks = [];
+
+        // Check each event for RFQ responses needed
+        for (const event of events) {
+          try {
+            // Check if there's an RFQ for this event
+            const rfqRes = await authFetch(`/events/${event.id}/rfq`);
+            if (!rfqRes.ok) continue;
+            const rfq = await rfqRes.json();
+
+            // If there's published RFQ content, check if user has responded
+            if (rfq && rfq.published && rfq.rich_text_content) {
+              const responsesRes = await authFetch(`/events/${event.id}/responses`);
+              if (!responsesRes.ok) continue;
+              const responses = await responsesRes.json();
+              
+              const myResponse = responses.find(r => r.user_id == userId);
+              
+              // If no response or response is rejected, it's a pending task
+              if (!myResponse || myResponse.status === 'rejected') {
+                pendingTasks.push({
+                  eventId: event.id,
+                  eventTitle: event.title || event.organisation_name || 'Unnamed Event',
+                  status: myResponse ? 'rejected' : 'not_submitted',
+                  reviewNotes: myResponse?.review_notes
+                });
+              }
+            }
+          } catch (err) {
+            console.error(`Error checking RFQ for event ${event.id}:`, err);
+          }
+        }
+
+        // Display tasks if any
+        if (pendingTasks.length > 0) {
+          tasksCard.style.display = 'block';
+          tasksContainer.innerHTML = pendingTasks.map(task => `
+            <div style="padding: 12px; background: #fff; border: 1px solid #dee2e6; border-radius: 8px; margin-bottom: 10px; cursor: pointer;" 
+                 onclick="window.location.href='bidder-response.html?eventId=${task.eventId}'">
+              <p style="margin: 0 0 8px 0; font-weight: 600; color: #333;">${task.eventTitle}</p>
+              ${task.status === 'rejected' 
+                ? `<p style="margin: 0; font-size: 0.875rem; color: #dc3545;">❌ Response rejected - Please resubmit</p>
+                   ${task.reviewNotes ? `<p style="margin: 4px 0 0 0; font-size: 0.8rem; color: #6c757d; font-style: italic;">"${task.reviewNotes}"</p>` : ''}`
+                : `<p style="margin: 0; font-size: 0.875rem; color: #856404;">📝 RFQ response required</p>`
+              }
+              <button class="btn-action-primary" style="margin-top: 8px; font-size: 0.875rem; padding: 6px 12px;">
+                ${task.status === 'rejected' ? 'Resubmit Response' : 'Submit Response'}
+              </button>
+            </div>
+          `).join('');
+        } else {
+          tasksCard.style.display = 'none';
+        }
+      } catch (err) {
+        console.error("Error loading pending tasks:", err);
+      }
+    }
+
     async function loadBidderEvents() {
       const token = localStorage.getItem("token");
       if (!token) {
@@ -103,11 +192,21 @@
           
           const eventItem = document.createElement("div");
           eventItem.className = "event-mini-item";
-          eventItem.onclick = () => window.location.href = `bid-screen.html?id=${evt.id}`;
           eventItem.innerHTML = `
-            <p class="event-mini-title">${displayTitle}</p>
-            <p class="event-mini-time">${new Date(evt.auction_time).toLocaleString()}</p>
+            <div onclick="window.location.href='bid-screen.html?id=${evt.id}'" style="cursor: pointer; flex: 1;">
+              <p class="event-mini-title">${displayTitle}</p>
+              <p class="event-mini-time">${new Date(evt.auction_time).toLocaleString()}</p>
+            </div>
+            <button 
+              class="btn btn-sm btn-outline-primary" 
+              onclick="event.stopPropagation(); window.location.href='bidder-response.html?eventId=${evt.id}'"
+              style="margin-left: auto; white-space: nowrap;">
+              📄 View Documents
+            </button>
           `;
+          eventItem.style.display = 'flex';
+          eventItem.style.alignItems = 'center';
+          eventItem.style.gap = '10px';
           list.appendChild(eventItem);
         });
 
@@ -131,6 +230,7 @@
     }
 
     loadBidderEvents();
+    loadPendingTasks();
     
     // === Logout handler ===
     document.getElementById("logout").addEventListener("click", (e) => {

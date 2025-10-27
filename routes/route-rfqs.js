@@ -78,56 +78,43 @@ module.exports = (pool) => {
   router.post("/events/:eventId/rfq", ensureAuthenticated, async (req, res) => {
     try {
       if (req.user.role !== "manager") {
-        return res.status(403).json({ error: "Only managers can manage RFQs" });
+        return res.status(403).json({ error: "Only managers can save RFQs" });
       }
 
-      const { eventId } = req.params;
-      const userId = req.user.id;
+      const eventId = parseInt(req.params.eventId);
+      const { info, rich_text_content, publish_time, clarification_deadline, deadline_time, reminder_time } = req.body;
 
-      // Check if the manager is a team member of this event
-      const isMember = await checkTeamMembership(eventId, userId);
-      if (!isMember) {
-        return res.status(403).json({ error: "You are not a team member of this event" });
-      }
-
-      const {
-        info,
-        rich_text_content,
-        publish_time,
-        deadline_time,
-        reminder_time,
-      } = req.body;
-
-      // Check if RFQ already exists for this event
-      const existing = await pool.query(
-        "SELECT id FROM rfqs WHERE event_id = $1",
+      // Check if RFQ already exists
+      const existingRFQ = await pool.query(
+        `SELECT id FROM rfqs WHERE event_id = $1`,
         [eventId]
       );
 
       let result;
-      if (existing.rows.length > 0) {
-        // Update existing RFQ - reset published to false when saving as draft
+      if (existingRFQ.rows.length > 0) {
+        // Update existing RFQ
         result = await pool.query(
           `UPDATE rfqs 
            SET info = $1, 
                rich_text_content = $2, 
                publish_time = $3, 
-               deadline_time = $4, 
-               reminder_time = $5,
+               clarification_deadline = $4,
+               deadline_time = $5, 
+               reminder_time = $6,
                published = FALSE,
                published_date = NULL,
                updated_at = NOW()
-           WHERE event_id = $6
+           WHERE event_id = $7
            RETURNING *`,
-          [info, rich_text_content, publish_time, deadline_time, reminder_time, eventId]
+          [info, rich_text_content, publish_time, clarification_deadline, deadline_time, reminder_time, eventId]
         );
       } else {
         // Create new RFQ
         result = await pool.query(
-          `INSERT INTO rfqs (event_id, info, rich_text_content, publish_time, deadline_time, reminder_time)
-           VALUES ($1, $2, $3, $4, $5, $6)
+          `INSERT INTO rfqs (event_id, info, rich_text_content, publish_time, clarification_deadline, deadline_time, reminder_time)
+           VALUES ($1, $2, $3, $4, $5, $6, $7)
            RETURNING *`,
-          [eventId, info, rich_text_content, publish_time, deadline_time, reminder_time]
+          [eventId, info, rich_text_content, publish_time, clarification_deadline, deadline_time, reminder_time]
         );
       }
 
@@ -158,6 +145,7 @@ module.exports = (pool) => {
         info,
         rich_text_content,
         publish_time,
+        clarification_deadline,
         deadline_time,
         reminder_time,
       } = req.body;
@@ -180,23 +168,24 @@ module.exports = (pool) => {
           `UPDATE rfqs 
            SET info = $1, 
                rich_text_content = $2, 
-               publish_time = $3, 
-               deadline_time = $4, 
-               reminder_time = $5,
+               publish_time = $3,
+               clarification_deadline = $4,
+               deadline_time = $5, 
+               reminder_time = $6,
                published = TRUE,
                published_date = NOW(),
                updated_at = NOW()
-           WHERE event_id = $6
+           WHERE event_id = $7
            RETURNING *`,
-          [info, rich_text_content, publish_time, deadline_time, reminder_time, eventId]
+          [info, rich_text_content, publish_time, clarification_deadline, deadline_time, reminder_time, eventId]
         );
       } else {
         // Create and set to publish new RFQ
         result = await pool.query(
-          `INSERT INTO rfqs (event_id, info, rich_text_content, publish_time, deadline_time, reminder_time, published, published_date)
-           VALUES ($1, $2, $3, $4, $5, $6, TRUE, NOW())
+          `INSERT INTO rfqs (event_id, info, rich_text_content, publish_time, clarification_deadline, deadline_time, reminder_time, published, published_date)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, TRUE, NOW())
            RETURNING *`,
-          [eventId, info, rich_text_content, publish_time, deadline_time, reminder_time]
+          [eventId, info, rich_text_content, publish_time, clarification_deadline, deadline_time, reminder_time]
         );
       }
 
@@ -287,13 +276,12 @@ module.exports = (pool) => {
         rfqId = rfqResult.rows[0].id;
       }
 
-      // Save attachment info to database
-      const filePath = `/uploads/rfq-documents/${req.file.filename}`;
+      // Save attachment info to database - use the full path from multer
       const result = await pool.query(
         `INSERT INTO rfq_attachments (rfq_id, event_id, filename, original_filename, file_path, file_size, mime_type)
          VALUES ($1, $2, $3, $4, $5, $6, $7)
          RETURNING *`,
-        [rfqId, eventId, req.file.filename, req.file.originalname, filePath, req.file.size, req.file.mimetype]
+        [rfqId, eventId, req.file.filename, req.file.originalname, req.file.path, req.file.size, req.file.mimetype]
       );
 
       res.json(result.rows[0]);
@@ -323,6 +311,29 @@ module.exports = (pool) => {
     } catch (err) {
       console.error("Error fetching attachments:", err);
       res.status(500).json({ error: "Failed to fetch attachments" });
+    }
+  });
+
+  // ---- Download RFQ attachment ----
+  router.get("/events/:eventId/rfq/attachments/:attachmentId/download", ensureAuthenticated, async (req, res) => {
+    try {
+      const { eventId, attachmentId } = req.params;
+
+      const result = await pool.query(
+        `SELECT * FROM rfq_attachments 
+         WHERE id = $1 AND event_id = $2`,
+        [attachmentId, eventId]
+      );
+
+      if (result.rows.length === 0) {
+        return res.status(404).json({ error: "Attachment not found" });
+      }
+
+      const attachment = result.rows[0];
+      res.download(attachment.file_path, attachment.original_filename);
+    } catch (err) {
+      console.error("Error downloading attachment:", err);
+      res.status(500).json({ error: "Failed to download attachment" });
     }
   });
 

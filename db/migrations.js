@@ -195,6 +195,7 @@ async function runMigrations() {
       ALTER TABLE rfqs
       ADD COLUMN IF NOT EXISTS rich_text_content TEXT,
       ADD COLUMN IF NOT EXISTS published_date TIMESTAMP,
+      ADD COLUMN IF NOT EXISTS clarification_deadline TIMESTAMP,
       ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT NOW();
     `);
     
