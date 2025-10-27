@@ -1,0 +1,483 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Submit RFQ Response - Reverse Auction</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="css/bidder.css">
+  <style>
+    .response-form-container {
+      max-width: 900px;
+      margin: 2rem auto;
+      padding: 2rem;
+    }
+    .rfq-instructions {
+      background: #f8f9fa;
+      padding: 1.5rem;
+      border-radius: 8px;
+      margin-bottom: 2rem;
+      border-left: 4px solid #0d6efd;
+    }
+    .rfq-instructions h4 {
+      margin-top: 0;
+      color: #333;
+    }
+    .rfq-content {
+      line-height: 1.8;
+      color: #495057;
+    }
+    .response-section {
+      background: white;
+      padding: 1.5rem;
+      border-radius: 8px;
+      border: 1px solid #dee2e6;
+      margin-bottom: 1.5rem;
+    }
+    .response-section h5 {
+      margin-top: 0;
+      margin-bottom: 1rem;
+      color: #333;
+    }
+    .response-textarea {
+      width: 100%;
+      min-height: 300px;
+      padding: 1rem;
+      border: 1px solid #ced4da;
+      border-radius: 6px;
+      font-family: inherit;
+      font-size: 0.95rem;
+      line-height: 1.6;
+    }
+    .response-textarea:focus {
+      outline: none;
+      border-color: #0d6efd;
+      box-shadow: 0 0 0 0.2rem rgba(13, 110, 253, 0.25);
+    }
+    .attachment-upload {
+      margin-top: 1rem;
+    }
+    .attachment-list {
+      margin-top: 1rem;
+    }
+    .attachment-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0.75rem;
+      background: #f8f9fa;
+      border-radius: 6px;
+      margin-bottom: 0.5rem;
+    }
+    .attachment-info {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    .status-alert {
+      padding: 1rem;
+      border-radius: 8px;
+      margin-bottom: 1.5rem;
+    }
+    .status-alert.pending {
+      background: #fff3cd;
+      border: 1px solid #ffc107;
+      color: #856404;
+    }
+    .status-alert.approved {
+      background: #d4edda;
+      border: 1px solid #28a745;
+      color: #155724;
+    }
+    .status-alert.rejected {
+      background: #f8d7da;
+      border: 1px solid #dc3545;
+      color: #721c24;
+    }
+  </style>
+</head>
+<body>
+  <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+    <div class="container-fluid">
+      <a class="navbar-brand" href="bidder.html">Bidder Portal</a>
+      <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+        <span class="navbar-toggler-icon"></span>
+      </button>
+      <div class="collapse navbar-collapse" id="navbarNav">
+        <ul class="navbar-nav ms-auto">
+          <li class="nav-item"><a class="nav-link" href="bidder.html">Dashboard</a></li>
+          <li class="nav-item"><a class="nav-link" href="bidderaccount.html">Account</a></li>
+          <li><button id="messages-btn" class="nav-icon-btn">💬</button></li>
+        </ul>
+      </div>
+    </div>
+  </nav>
+
+  <main class="response-form-container">
+    <h2 id="event-name">Loading...</h2>
+    <p class="text-muted" id="event-description"></p>
+
+    <div id="status-container"></div>
+
+    <div class="rfq-instructions">
+      <h4>RFQ Instructions</h4>
+      <div id="rfq-content" class="rfq-content">
+        <p class="text-muted">Loading instructions...</p>
+      </div>
+      <div id="rfq-schedule" class="mt-3"></div>
+      <div id="rfq-attachments" class="mt-3"></div>
+    </div>
+
+    <div class="response-section">
+      <h5>Your Response</h5>
+      <textarea 
+        id="response-text" 
+        class="response-textarea" 
+        placeholder="Enter your response to the RFQ instructions here..."
+      ></textarea>
+      
+      <div class="attachment-upload">
+        <label for="file-upload" class="btn btn-outline-primary">
+          📎 Attach Documents
+        </label>
+        <input 
+          type="file" 
+          id="file-upload" 
+          multiple 
+          style="display: none;"
+        >
+        <p class="text-muted small mt-2">
+          Accepted: PDF, Word, Excel, Images, Zip (Max 50MB per file)
+        </p>
+      </div>
+
+      <div id="attachment-list" class="attachment-list"></div>
+
+      <div class="d-flex gap-2 mt-3">
+        <button id="save-draft-btn" class="btn btn-secondary">Save Draft</button>
+        <button id="submit-btn" class="btn btn-primary">Submit Response</button>
+        <a href="bidder.html" class="btn btn-outline-secondary">Back to Dashboard</a>
+      </div>
+    </div>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="libs/jwt-decode.min.js"></script>
+  <script src="config.js"></script>
+  <script src="auth.js"></script>
+  <script src="messages.js"></script>
+  <script>
+    let eventId, responseId = null;
+    let attachments = [];
+
+    async function init() {
+      const urlParams = new URLSearchParams(window.location.search);
+      eventId = urlParams.get("eventId");
+      
+      if (!eventId) {
+        alert("No event ID provided.");
+        window.location.href = "bidder.html";
+        return;
+      }
+
+      await loadEventData();
+      await loadRFQInstructions();
+      await loadExistingResponse();
+      setupEventListeners();
+    }
+
+    async function loadEventData() {
+      try {
+        const token = localStorage.getItem("token");
+        const res = await fetch(`${API_BASE_URL}/events/${eventId}`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+
+        if (res.ok) {
+          const event = await res.json();
+          document.getElementById("event-name").textContent = event.event_name;
+          document.getElementById("event-description").textContent = event.description || "";
+        }
+      } catch (err) {
+        console.error("Error loading event:", err);
+      }
+    }
+
+    async function loadRFQInstructions() {
+      try {
+        const token = localStorage.getItem("token");
+        const res = await fetch(`${API_BASE_URL}/events/${eventId}/rfq`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+
+        if (res.ok) {
+          const rfq = await res.json();
+          const contentDiv = document.getElementById("rfq-content");
+          
+          if (rfq.rich_text_content) {
+            contentDiv.innerHTML = rfq.rich_text_content;
+          } else {
+            contentDiv.innerHTML = '<p class="text-muted">No instructions available yet.</p>';
+          }
+
+          // Show schedule
+          const scheduleDiv = document.getElementById("rfq-schedule");
+          let scheduleHTML = '';
+          if (rfq.deadline_time) {
+            scheduleHTML += `<p><strong>Response Deadline:</strong> ${new Date(rfq.deadline_time).toLocaleString()}</p>`;
+          }
+          if (rfq.reminder_time) {
+            scheduleHTML += `<p><strong>Reminder:</strong> ${new Date(rfq.reminder_time).toLocaleString()}</p>`;
+          }
+          scheduleDiv.innerHTML = scheduleHTML;
+
+          // Load RFQ attachments
+          await loadRFQAttachments();
+        }
+      } catch (err) {
+        console.error("Error loading RFQ:", err);
+      }
+    }
+
+    async function loadRFQAttachments() {
+      try {
+        const token = localStorage.getItem("token");
+        const res = await fetch(`${API_BASE_URL}/events/${eventId}/rfq/attachments`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+
+        if (res.ok) {
+          const attachments = await res.json();
+          const container = document.getElementById("rfq-attachments");
+          
+          if (attachments.length > 0) {
+            container.innerHTML = '<h6>Documents:</h6>' + attachments.map(att => `
+              <div class="attachment-item">
+                <span>${att.original_filename}</span>
+                <a href="${API_BASE_URL}/events/${eventId}/rfq/attachments/${att.id}/download" 
+                   class="btn btn-sm btn-outline-primary" target="_blank">Download</a>
+              </div>
+            `).join('');
+          }
+        }
+      } catch (err) {
+        console.error("Error loading RFQ attachments:", err);
+      }
+    }
+
+    async function loadExistingResponse() {
+      try {
+        const token = localStorage.getItem("token");
+        const userId = jwtDecode(token).userId;
+        
+        // Try to get existing response
+        const res = await fetch(`${API_BASE_URL}/events/${eventId}/responses`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+
+        if (res.ok) {
+          const responses = await res.json();
+          const myResponse = responses.find(r => r.user_id == userId);
+          
+          if (myResponse) {
+            responseId = myResponse.id;
+            document.getElementById("response-text").value = myResponse.response_text || '';
+            
+            // Show status
+            showStatus(myResponse.status, myResponse.review_notes);
+            
+            // Load attachments
+            await loadResponseAttachments();
+          }
+        }
+      } catch (err) {
+        console.error("Error loading existing response:", err);
+      }
+    }
+
+    function showStatus(status, notes) {
+      const container = document.getElementById("status-container");
+      let html = '';
+      
+      if (status === 'pending') {
+        html = `
+          <div class="status-alert pending">
+            <strong>Status: Pending Review</strong>
+            <p class="mb-0">Your response has been submitted and is awaiting manager review.</p>
+          </div>
+        `;
+      } else if (status === 'approved') {
+        html = `
+          <div class="status-alert approved">
+            <strong>Status: Approved ✓</strong>
+            <p class="mb-0">Your response has been approved! You can now participate in bidding.</p>
+            ${notes ? `<p class="mt-2 mb-0"><em>Notes: ${notes}</em></p>` : ''}
+          </div>
+        `;
+      } else if (status === 'rejected') {
+        html = `
+          <div class="status-alert rejected">
+            <strong>Status: Rejected</strong>
+            <p class="mb-0">Your response was not approved. Please review the feedback and resubmit.</p>
+            ${notes ? `<p class="mt-2 mb-0"><em>Reason: ${notes}</em></p>` : ''}
+          </div>
+        `;
+      }
+      
+      container.innerHTML = html;
+    }
+
+    async function loadResponseAttachments() {
+      if (!responseId) return;
+      
+      try {
+        const token = localStorage.getItem("token");
+        const res = await fetch(`${API_BASE_URL}/events/${eventId}/responses/${responseId}/attachments`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+
+        if (res.ok) {
+          attachments = await res.json();
+          displayAttachments();
+        }
+      } catch (err) {
+        console.error("Error loading attachments:", err);
+      }
+    }
+
+    function displayAttachments() {
+      const container = document.getElementById("attachment-list");
+      
+      if (attachments.length === 0) {
+        container.innerHTML = '';
+        return;
+      }
+
+      container.innerHTML = attachments.map(att => `
+        <div class="attachment-item">
+          <div class="attachment-info">
+            <span>📄</span>
+            <span>${att.original_filename}</span>
+            <span class="text-muted small">(${formatFileSize(att.file_size)})</span>
+          </div>
+          <button class="btn btn-sm btn-danger" onclick="deleteAttachment(${att.id})">Delete</button>
+        </div>
+      `).join('');
+    }
+
+    async function uploadFile(file) {
+      if (!responseId) {
+        alert("Please save your response first before uploading attachments.");
+        return;
+      }
+
+      const formData = new FormData();
+      formData.append("file", file);
+
+      try {
+        const token = localStorage.getItem("token");
+        const res = await fetch(`${API_BASE_URL}/events/${eventId}/responses/${responseId}/attachments`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}` },
+          body: formData
+        });
+
+        if (res.ok) {
+          await loadResponseAttachments();
+        } else {
+          alert("Error uploading file");
+        }
+      } catch (err) {
+        console.error("Error uploading:", err);
+        alert("Error uploading file");
+      }
+    }
+
+    async function deleteAttachment(attachmentId) {
+      if (!confirm("Delete this attachment?")) return;
+
+      try {
+        const token = localStorage.getItem("token");
+        const res = await fetch(`${API_BASE_URL}/events/${eventId}/responses/${responseId}/attachments/${attachmentId}`, {
+          method: "DELETE",
+          headers: { Authorization: `Bearer ${token}` }
+        });
+
+        if (res.ok) {
+          await loadResponseAttachments();
+        } else {
+          alert("Error deleting attachment");
+        }
+      } catch (err) {
+        console.error("Error deleting:", err);
+        alert("Error deleting attachment");
+      }
+    }
+
+    async function saveResponse(isSubmit = false) {
+      const responseText = document.getElementById("response-text").value.trim();
+
+      if (!responseText) {
+        alert("Please enter a response before " + (isSubmit ? "submitting" : "saving"));
+        return;
+      }
+
+      try {
+        const token = localStorage.getItem("token");
+        const res = await fetch(`${API_BASE_URL}/events/${eventId}/responses`, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({ response_text: responseText })
+        });
+
+        if (res.ok) {
+          const data = await res.json();
+          responseId = data.id;
+          
+          if (isSubmit) {
+            alert("Response submitted successfully! It will be reviewed by the event managers.");
+            await loadExistingResponse();
+          } else {
+            alert("Draft saved successfully!");
+          }
+        } else {
+          alert("Error saving response");
+        }
+      } catch (err) {
+        console.error("Error saving response:", err);
+        alert("Error saving response");
+      }
+    }
+
+    function setupEventListeners() {
+      document.getElementById("file-upload").addEventListener("change", (e) => {
+        const files = Array.from(e.target.files);
+        files.forEach(file => uploadFile(file));
+        e.target.value = ''; // Reset input
+      });
+
+      document.getElementById("save-draft-btn").addEventListener("click", () => {
+        saveResponse(false);
+      });
+
+      document.getElementById("submit-btn").addEventListener("click", () => {
+        if (confirm("Submit your response for review? You can still edit it later if needed.")) {
+          saveResponse(true);
+        }
+      });
+    }
+
+    function formatFileSize(bytes) {
+      if (bytes < 1024) return bytes + ' B';
+      if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+      return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+    }
+
+    document.addEventListener("DOMContentLoaded", init);
+  </script>
+</body>
+</html>

@@ -49,6 +49,12 @@ app.use("/", lotRoutes);
 const categoryRoutes = require("./routes/route-categories")(pool);
 app.use("/", categoryRoutes);
 
+const rfqRoutes = require("./routes/route-rfqs")(pool);
+app.use("/", rfqRoutes);
+
+const responseRoutes = require("./routes/route-responses")(pool);
+app.use("/", responseRoutes);
+
 const adminRoutes = require("./routes/route-admin")(pool);
 app.use("/", adminRoutes);
 

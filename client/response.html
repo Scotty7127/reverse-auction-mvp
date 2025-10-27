@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>RFQ Responses</title>
+  <!-- Bootstrap CSS -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css" />
+  <link rel="stylesheet" href="css/eventdetail.css">
+  <link rel="stylesheet" href="css/responses.css">
+  <script>
+    window.requiredRoles = ["manager"];
+  </script>
+  <script src="/config.js"></script>
+  <script src="/auth.js"></script>
+</head>
+<body>
+  <!-- Navbar -->
+  <nav class="navbar">
+    <div class="nav-container">
+      <a href="manager.html" class="brand">Tendersmith</a>
+      <ul class="nav-links">
+        <li><a href="manager.html">Home</a></li>
+        <li><a href="events.html">Events</a></li>
+        <li><a href="organisations.html">Organisations</a></li>
+        <li><a href="stats.html">Stats</a></li>
+        <li><a href="account.html">Account</a></li>
+        <li><button id="messages-btn" class="nav-icon-btn">💬</button></li>
+      </ul>
+    </div>
+  </nav>
+
+  <div class="event-tabs">
+    <div class="tab" data-tab="overview">Overview</div>
+    <div class="tab" data-tab="lots">Lots</div>
+    <div class="tab" data-tab="lines">All Line Items</div>
+    <div class="tab" data-tab="members">Members</div>
+    <div class="tab" data-tab="docs">Documents</div>
+    <div class="tab active" data-tab="responses">Responses</div>
+    <div class="tab" data-tab="pricing">Pricing</div>
+  </div>
+
+  <main class="event-detail-page">
+    <div id="event-header">
+      <h1 id="event-name">Loading...</h1>
+      <p id="event-description"></p>
+    </div>
+
+    <div class="responses-container">
+      <div class="responses-header">
+        <h2>RFQ Responses</h2>
+        <div class="responses-stats">
+          <span class="stat-badge">Total: <strong id="total-responses">0</strong></span>
+          <span class="stat-badge pending">Pending: <strong id="pending-responses">0</strong></span>
+          <span class="stat-badge approved">Approved: <strong id="approved-responses">0</strong></span>
+          <span class="stat-badge rejected">Rejected: <strong id="rejected-responses">0</strong></span>
+        </div>
+      </div>
+
+      <div class="responses-filters">
+        <button class="filter-btn active" data-filter="all">All Responses</button>
+        <button class="filter-btn" data-filter="pending">Pending Review</button>
+        <button class="filter-btn" data-filter="approved">Approved</button>
+        <button class="filter-btn" data-filter="rejected">Rejected</button>
+      </div>
+
+      <div id="responses-list" class="responses-list">
+        <div class="loading-state">Loading responses...</div>
+      </div>
+    </div>
+  </main>
+
+  <!-- Response Detail Modal -->
+  <div class="modal fade" id="responseDetailModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">Response Details</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <div class="response-detail-container">
+            <div class="bidder-info">
+              <h6>Bidder Information</h6>
+              <p><strong>Name:</strong> <span id="detail-bidder-name"></span></p>
+              <p><strong>Organization:</strong> <span id="detail-bidder-org"></span></p>
+              <p><strong>Email:</strong> <span id="detail-bidder-email"></span></p>
+              <p><strong>Submitted:</strong> <span id="detail-submitted-date"></span></p>
+            </div>
+
+            <div class="response-content">
+              <h6>Response Text</h6>
+              <div id="detail-response-text" class="response-text-display"></div>
+            </div>
+
+            <div class="response-attachments" id="detail-attachments-section">
+              <h6>Attachments</h6>
+              <div id="detail-attachments-list"></div>
+            </div>
+
+            <div class="review-section">
+              <h6>Review Notes</h6>
+              <textarea id="review-notes" class="form-control" rows="3" placeholder="Add notes about this response..."></textarea>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+          <button type="button" class="btn btn-danger" id="reject-btn">Reject Response</button>
+          <button type="button" class="btn btn-success" id="approve-btn">Approve & Allow Bidding</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Socket.IO client -->
+  <script src="/socket.io/socket.io.js"></script>
+  <!-- Enable messaging script -->
+  <script src="/messages.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jwt-decode@3.1.2/build/jwt-decode.min.js"></script>
+  <script>
+    let eventId, currentFilter = 'all', currentResponseId = null;
+    let responsesData = [];
+
+    async function init() {
+      const urlParams = new URLSearchParams(window.location.search);
+      eventId = urlParams.get("eventId") || urlParams.get("event_id");
+      if (!eventId) {
+        alert("No event ID provided.");
+        window.location.href = "events.html";
+        return;
+      }
+
+      await loadEventData();
+      await loadResponses();
+      setupEventListeners();
+    }
+
+    async function loadEventData() {
+      try {
+        const token = localStorage.getItem("token");
+        const res = await fetch(`${apiBase}/events/${eventId}`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+
+        if (res.ok) {
+          const event = await res.json();
+          document.getElementById("event-name").textContent = event.event_name;
+          document.getElementById("event-description").textContent = event.description || "";
+        }
+      } catch (err) {
+        console.error("Error loading event:", err);
+      }
+    }
+
+    async function loadResponses() {
+      try {
+        const token = localStorage.getItem("token");
+        const res = await fetch(`${apiBase}/events/${eventId}/responses`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+
+        if (res.ok) {
+          responsesData = await res.json();
+          updateStats();
+          displayResponses();
+        } else {
+          document.getElementById("responses-list").innerHTML = '<div class="error-state">Error loading responses</div>';
+        }
+      } catch (err) {
+        console.error("Error loading responses:", err);
+        document.getElementById("responses-list").innerHTML = '<div class="error-state">Error loading responses</div>';
+      }
+    }
+
+    function updateStats() {
+      const total = responsesData.length;
+      const pending = responsesData.filter(r => r.status === 'pending').length;
+      const approved = responsesData.filter(r => r.status === 'approved').length;
+      const rejected = responsesData.filter(r => r.status === 'rejected').length;
+
+      document.getElementById("total-responses").textContent = total;
+      document.getElementById("pending-responses").textContent = pending;
+      document.getElementById("approved-responses").textContent = approved;
+      document.getElementById("rejected-responses").textContent = rejected;
+    }
+
+    function displayResponses() {
+      const filteredResponses = currentFilter === 'all' 
+        ? responsesData 
+        : responsesData.filter(r => r.status === currentFilter);
+
+      const container = document.getElementById("responses-list");
+
+      if (filteredResponses.length === 0) {
+        container.innerHTML = '<div class="empty-state">No responses found</div>';
+        return;
+      }
+
+      container.innerHTML = filteredResponses.map(response => `
+        <div class="response-card" data-response-id="${response.id}">
+          <div class="response-card-header">
+            <div class="bidder-info-compact">
+              <strong>${response.bidder_name || 'Unknown Bidder'}</strong>
+              <span class="text-muted">${response.bidder_email || ''}</span>
+            </div>
+            <span class="status-badge status-${response.status}">${response.status.toUpperCase()}</span>
+          </div>
+          <div class="response-card-body">
+            <div class="response-preview">
+              ${response.response_text ? response.response_text.substring(0, 200) + (response.response_text.length > 200 ? '...' : '') : 'No text provided'}
+            </div>
+            <div class="response-meta">
+              <span>Submitted: ${new Date(response.submitted_at).toLocaleString()}</span>
+              ${response.attachment_count > 0 ? `<span>📎 ${response.attachment_count} attachment(s)</span>` : ''}
+            </div>
+          </div>
+          <div class="response-card-footer">
+            <button class="btn btn-sm btn-primary view-response-btn">View Details</button>
+            ${response.status === 'pending' ? `
+              <button class="btn btn-sm btn-success quick-approve-btn">Quick Approve</button>
+              <button class="btn btn-sm btn-danger quick-reject-btn">Quick Reject</button>
+            ` : ''}
+          </div>
+        </div>
+      `).join('');
+
+      // Add event listeners to response cards
+      container.querySelectorAll('.view-response-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          const card = e.target.closest('.response-card');
+          const responseId = card.dataset.responseId;
+          viewResponseDetail(responseId);
+        });
+      });
+
+      container.querySelectorAll('.quick-approve-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const card = e.target.closest('.response-card');
+          const responseId = card.dataset.responseId;
+          quickApprove(responseId);
+        });
+      });
+
+      container.querySelectorAll('.quick-reject-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const card = e.target.closest('.response-card');
+          const responseId = card.dataset.responseId;
+          quickReject(responseId);
+        });
+      });
+    }
+
+    async function viewResponseDetail(responseId) {
+      currentResponseId = responseId;
+      const response = responsesData.find(r => r.id == responseId);
+      if (!response) return;
+
+      document.getElementById("detail-bidder-name").textContent = response.bidder_name || 'Unknown';
+      document.getElementById("detail-bidder-org").textContent = response.bidder_org || 'N/A';
+      document.getElementById("detail-bidder-email").textContent = response.bidder_email || 'N/A';
+      document.getElementById("detail-submitted-date").textContent = new Date(response.submitted_at).toLocaleString();
+      document.getElementById("detail-response-text").innerHTML = response.response_text || 'No response text provided';
+      document.getElementById("review-notes").value = response.review_notes || '';
+
+      // Load attachments
+      if (response.attachment_count > 0) {
+        await loadResponseAttachments(responseId);
+        document.getElementById("detail-attachments-section").style.display = 'block';
+      } else {
+        document.getElementById("detail-attachments-section").style.display = 'none';
+      }
+
+      // Update button states based on current status
+      const approveBtn = document.getElementById("approve-btn");
+      const rejectBtn = document.getElementById("reject-btn");
+      
+      if (response.status === 'approved') {
+        approveBtn.disabled = true;
+        approveBtn.textContent = 'Already Approved';
+        rejectBtn.disabled = false;
+        rejectBtn.textContent = 'Revoke Approval';
+      } else if (response.status === 'rejected') {
+        rejectBtn.disabled = true;
+        rejectBtn.textContent = 'Already Rejected';
+        approveBtn.disabled = false;
+        approveBtn.textContent = 'Approve & Allow Bidding';
+      } else {
+        approveBtn.disabled = false;
+        rejectBtn.disabled = false;
+        approveBtn.textContent = 'Approve & Allow Bidding';
+        rejectBtn.textContent = 'Reject Response';
+      }
+
+      const modal = new bootstrap.Modal(document.getElementById('responseDetailModal'));
+      modal.show();
+    }
+
+    async function loadResponseAttachments(responseId) {
+      try {
+        const token = localStorage.getItem("token");
+        const res = await fetch(`${apiBase}/events/${eventId}/responses/${responseId}/attachments`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+
+        if (res.ok) {
+          const attachments = await res.json();
+          const container = document.getElementById("detail-attachments-list");
+          
+          if (attachments.length === 0) {
+            container.innerHTML = '<p class="text-muted">No attachments</p>';
+            return;
+          }
+
+          container.innerHTML = attachments.map(att => `
+            <div class="attachment-item">
+              <span class="attachment-name">${att.original_filename}</span>
+              <span class="attachment-size">${formatFileSize(att.file_size)}</span>
+              <a href="${apiBase}/events/${eventId}/responses/${responseId}/attachments/${att.id}/download" 
+                 class="btn btn-sm btn-outline-primary" target="_blank">Download</a>
+            </div>
+          `).join('');
+        }
+      } catch (err) {
+        console.error("Error loading attachments:", err);
+      }
+    }
+
+    async function quickApprove(responseId) {
+      if (!confirm('Approve this response and allow the bidder to participate in bidding?')) return;
+      await updateResponseStatus(responseId, 'approved', '');
+    }
+
+    async function quickReject(responseId) {
+      const notes = prompt('Reason for rejection (optional):');
+      if (notes === null) return; // User cancelled
+      await updateResponseStatus(responseId, 'rejected', notes);
+    }
+
+    async function updateResponseStatus(responseId, status, notes) {
+      try {
+        const token = localStorage.getItem("token");
+        const res = await fetch(`${apiBase}/events/${eventId}/responses/${responseId}/review`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ status, review_notes: notes })
+        });
+
+        if (res.ok) {
+          alert(`Response ${status} successfully`);
+          await loadResponses();
+          
+          // Close modal if open
+          const modal = bootstrap.Modal.getInstance(document.getElementById('responseDetailModal'));
+          if (modal) modal.hide();
+        } else {
+          alert('Error updating response status');
+        }
+      } catch (err) {
+        console.error("Error updating status:", err);
+        alert('Error updating response status');
+      }
+    }
+
+    function setupEventListeners() {
+      // Tab navigation
+      document.querySelectorAll(".tab").forEach(tab => {
+        tab.addEventListener("click", () => {
+          const target = tab.dataset.tab;
+          
+          // Handle specific page navigation
+          if (target === "overview" || target === "lots" || target === "lines" || target === "members") {
+            window.location.href = `event.html?id=${eventId}&tab=${target}`;
+          } else if (target === "pricing") {
+            window.location.href = `auction.html?event_id=${eventId}`;
+          } else if (target === "docs") {
+            window.location.href = `docs.html?event_id=${eventId}`;
+          } else if (target === "responses") {
+            // Already on responses page, do nothing
+            return;
+          }
+        });
+      });
+
+      // Filter buttons
+      document.querySelectorAll('.filter-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+          btn.classList.add('active');
+          currentFilter = btn.dataset.filter;
+          displayResponses();
+        });
+      });
+
+      // Modal approve/reject buttons
+      document.getElementById("approve-btn").addEventListener('click', async () => {
+        const notes = document.getElementById("review-notes").value;
+        await updateResponseStatus(currentResponseId, 'approved', notes);
+      });
+
+      document.getElementById("reject-btn").addEventListener('click', async () => {
+        const notes = document.getElementById("review-notes").value || prompt('Reason for rejection (optional):') || '';
+        await updateResponseStatus(currentResponseId, 'rejected', notes);
+      });
+    }
+
+    function formatFileSize(bytes) {
+      if (bytes < 1024) return bytes + ' B';
+      if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+      return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+    }
+
+    // Initialize when DOM and auth are ready
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', () => {
+        setTimeout(init, 100); // Small delay to ensure auth.js has initialized
+      });
+    } else {
+      setTimeout(init, 100);
+    }
+  </script>
+</body>
+</html>

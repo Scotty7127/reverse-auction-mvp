@@ -178,12 +178,48 @@ async function runMigrations() {
       CREATE TABLE IF NOT EXISTS rfqs (
         id SERIAL PRIMARY KEY,
         event_id INTEGER REFERENCES events(id) ON DELETE CASCADE,
-        info TEXT NOT NULL,
-        publish_time TIMESTAMP NOT NULL,
-        deadline_time TIMESTAMP NOT NULL,
+        info TEXT,
+        rich_text_content TEXT,
+        publish_time TIMESTAMP,
+        deadline_time TIMESTAMP,
         reminder_time TIMESTAMP,
         published BOOLEAN DEFAULT FALSE,
-        created_at TIMESTAMP DEFAULT NOW()
+        published_date TIMESTAMP,
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW()
+      );
+    `);
+    
+    // Add new columns to existing rfqs table
+    await pool.query(`
+      ALTER TABLE rfqs
+      ADD COLUMN IF NOT EXISTS rich_text_content TEXT,
+      ADD COLUMN IF NOT EXISTS published_date TIMESTAMP,
+      ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT NOW();
+    `);
+    
+    // Alter existing columns to drop NOT NULL constraints if they exist
+    await pool.query(`
+      ALTER TABLE rfqs
+      ALTER COLUMN info DROP NOT NULL,
+      ALTER COLUMN publish_time DROP NOT NULL,
+      ALTER COLUMN deadline_time DROP NOT NULL;
+    `).catch(() => {
+      // Ignore errors if constraints don't exist
+    });
+
+    // === RFQ ATTACHMENTS ===
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS rfq_attachments (
+        id SERIAL PRIMARY KEY,
+        rfq_id INTEGER REFERENCES rfqs(id) ON DELETE CASCADE,
+        event_id INTEGER REFERENCES events(id) ON DELETE CASCADE,
+        filename TEXT NOT NULL,
+        original_filename TEXT NOT NULL,
+        file_path TEXT NOT NULL,
+        file_size INTEGER,
+        mime_type TEXT,
+        uploaded_at TIMESTAMP DEFAULT NOW()
       );
     `);
 
@@ -238,12 +274,45 @@ async function runMigrations() {
       );
     `);
 
+    // === RFQ RESPONSES ===
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS rfq_responses (
+        id SERIAL PRIMARY KEY,
+        event_id INTEGER REFERENCES events(id) ON DELETE CASCADE,
+        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        response_text TEXT,
+        status TEXT CHECK (status IN ('pending','approved','rejected')) DEFAULT 'pending',
+        review_notes TEXT,
+        reviewed_by INTEGER REFERENCES users(id),
+        reviewed_at TIMESTAMP,
+        submitted_at TIMESTAMP DEFAULT NOW(),
+        UNIQUE (event_id, user_id)
+      );
+    `);
+
+    // === RFQ RESPONSE ATTACHMENTS ===
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS rfq_response_attachments (
+        id SERIAL PRIMARY KEY,
+        response_id INTEGER REFERENCES rfq_responses(id) ON DELETE CASCADE,
+        event_id INTEGER REFERENCES events(id) ON DELETE CASCADE,
+        filename TEXT NOT NULL,
+        original_filename TEXT NOT NULL,
+        file_path TEXT NOT NULL,
+        file_size BIGINT,
+        mime_type TEXT,
+        uploaded_at TIMESTAMP DEFAULT NOW()
+      );
+    `);
+
     // === PERFORMANCE INDEXES ===
     await pool.query(`
       CREATE INDEX IF NOT EXISTS bids_event_idx ON bids(event_id);
       CREATE INDEX IF NOT EXISTS bids_event_line_idx ON bids(event_id, line_item_id);
       CREATE INDEX IF NOT EXISTS slis_event_idx ON supplier_line_item_settings(event_id);
       CREATE INDEX IF NOT EXISTS slis_event_line_idx ON supplier_line_item_settings(event_id, line_item_id);
+      CREATE INDEX IF NOT EXISTS rfq_responses_event_idx ON rfq_responses(event_id);
+      CREATE INDEX IF NOT EXISTS rfq_responses_status_idx ON rfq_responses(status);
     `);
 
     console.log("✅ Startup migrations complete.");

@@ -3,11 +3,14 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Documents</title>
+  <title>RFQ Instructions</title>
   <!-- Bootstrap CSS -->
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <!-- Quill Rich Text Editor CSS -->
+  <link href="https://cdn.quilljs.com/1.3.6/quill.snow.css" rel="stylesheet">
   <link rel="stylesheet" href="css/style.css" />
   <link rel="stylesheet" href="css/eventdetail.css">
+  <link rel="stylesheet" href="css/docs.css">
   <script>
     window.requiredRoles = ["manager"];
   </script>
@@ -36,54 +39,163 @@
     <div class="tab" data-tab="lines">All Line Items</div>
     <div class="tab" data-tab="members">Members</div>
     <div class="tab active" data-tab="docs">Documents</div>
+    <div class="tab" data-tab="responses">Responses</div>
     <div class="tab" data-tab="pricing">Pricing</div>
   </div>
 
   <main class="event-detail-page">
     <div class="event-content">
       <section id="docs" class="tab-content active">
-        <h2>Documents</h2>
-        <div class="rfq-card">
-          <div class="card-header-custom">
-            <h4 class="card-title">Information / Email Content</h4>
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+          <div>
+            <h2 style="display: inline-block; margin: 0;">RFQ Instructions</h2>
           </div>
-          <div class="card-content">
-            <textarea id="rfq-info" class="rfq-textarea" rows="6" placeholder="Write the email content that will be sent to bidders..."></textarea>
-          </div>
-        </div>
-        
-        <div class="rfq-card">
-          <div class="card-header-custom">
-            <h4 class="card-title">Schedule</h4>
-          </div>
-          <div class="card-content">
-            <div class="form-grid">
-              <div class="form-group">
-                <label class="form-label">Publish Date & Time:</label>
-                <input type="datetime-local" id="rfq-publish" class="form-input" />
-              </div>
-              <div class="form-group">
-                <label class="form-label">Deadline for Responses:</label>
-                <input type="datetime-local" id="rfq-deadline" class="form-input" />
-              </div>
-              <div class="form-group">
-                <label class="form-label">Reminder Time:</label>
-                <input type="datetime-local" id="rfq-reminder" class="form-input" />
-                <small class="form-hint">Defaults to 1 day before deadline</small>
-              </div>
-            </div>
-            <div class="rfq-actions">
-              <button id="save-rfq-btn" class="btn-secondary">Save Draft</button>
-              <button id="publish-rfq-btn" class="btn-primary">Publish Now</button>
-            </div>
+          <div>
+            <button id="view-past-btn" class="btn-secondary" style="margin-right: 10px;">
+              View Past Instructions
+            </button>
+            <button id="edit-mode-btn" class="btn-secondary">
+              Edit
+            </button>
+            <button id="view-mode-btn" class="btn-secondary">
+              View
+            </button>
           </div>
         </div>
-        <div id="rfq-status"></div>
+
+        <div style="margin-bottom: 20px;">
+          <span style="font-weight: 500; color: #333;">Status:</span>
+          <span id="status-badge" class="status-badge status-unscheduled">Unscheduled</span>
+        </div>
+
+        <!-- View Mode -->
+        <div id="view-container" style="display: none;">
+          <!-- Publish Date at top -->
+          <div id="view-publish-date" class="view-metadata" style="display: none;">
+            <strong>Published:</strong> <span id="view-publish-time"></span>
+          </div>
+          
+          <!-- Instructions content -->
+          <div class="view-mode" id="instructions-display">
+            <div class="empty-state">No instructions have been created yet.</div>
+          </div>
+          
+          <!-- Attachments right after content -->
+          <div id="view-attachments-section" style="display: none;">
+            <h4 style="margin-bottom: 15px; color: #333;">Attachments</h4>
+            <div id="view-attachments-list"></div>
+          </div>
+          
+          <!-- Deadline and Reminder at bottom -->
+          <div id="view-deadline-reminder" class="view-schedule-bottom" style="display: none;">
+            <div class="schedule-row">
+              <strong>Deadline for Responses:</strong> <span id="view-deadline-time"></span>
+            </div>
+            <div class="schedule-row">
+              <strong>Reminder:</strong> <span id="view-reminder-time"></span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Edit Mode -->
+        <div id="edit-container">
+          <div class="rfq-card">
+            <div class="card-header-custom">
+              <h4 class="card-title">Instructions Content</h4>
+            </div>
+            <div class="card-content">
+              <div class="editor-container">
+                <div id="editor"></div>
+              </div>
+            </div>
+          </div>
+          
+          <div class="rfq-card">
+            <div class="card-header-custom">
+              <h4 class="card-title">Document Attachments</h4>
+            </div>
+            <div class="card-content">
+              <div style="margin-bottom: 15px;">
+                <input type="file" id="attachment-upload" style="display: none;" />
+                <button id="upload-attachment-btn" class="btn-secondary">
+                  Upload Document
+                </button>
+                <small class="form-hint" style="display: block; margin-top: 8px;">
+                  Supported: PDF, Word, Excel, PowerPoint, Images, ZIP (Max 50MB)
+                </small>
+              </div>
+              <div id="attachments-list">
+                <div class="empty-state" style="padding: 20px;">No attachments yet.</div>
+              </div>
+            </div>
+          </div>
+          
+          <div class="rfq-card">
+            <div class="card-header-custom">
+              <h4 class="card-title">Schedule</h4>
+            </div>
+            <div class="card-content">
+              <div class="form-grid">
+                <div class="form-group">
+                  <label class="form-label">Publish Date & Time:</label>
+                  <input type="datetime-local" id="rfq-publish" class="form-input" />
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Deadline for Responses:</label>
+                  <input type="datetime-local" id="rfq-deadline" class="form-input" />
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Reminder Time:</label>
+                  <input type="datetime-local" id="rfq-reminder" class="form-input" />
+                  <small class="form-hint">Defaults to 1 day before deadline</small>
+                </div>
+              </div>
+              <div class="rfq-actions">
+                <button id="save-rfq-btn" class="btn-secondary">Save Draft</button>
+                <button id="publish-rfq-btn" class="btn-primary">Set to Publish</button>
+                <button id="cancel-schedule-btn" class="btn-secondary" style="display: none; background: #dc3545; color: white; border-color: #dc3545;">Cancel Schedule</button>
+              </div>
+            </div>
+          </div>
+          <div id="rfq-status"></div>
+        </div>
       </section>
     </div>
   </main>
 
+  <!-- Past Instructions Modal -->
+  <div id="past-instructions-modal" class="modal">
+    <div class="modal-content-custom">
+      <button class="modal-close" onclick="closePastInstructionsModal()">&times;</button>
+      <h3 style="margin-bottom: 20px;">Past RFQ Instructions</h3>
+      <p style="color: #666; margin-bottom: 20px;">
+        Select instructions from previous events in the same organisation and category
+      </p>
+      <div id="past-instructions-list">
+        <div class="empty-state">Loading...</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- View Past Instruction Detail Modal -->
+  <div id="view-past-modal" class="modal">
+    <div class="modal-content-custom">
+      <button class="modal-close" onclick="closeViewPastModal()">&times;</button>
+      <h3 id="past-event-title" style="margin-bottom: 10px;"></h3>
+      <div id="past-published-date" style="color: #666; margin-bottom: 20px;"></div>
+      <div id="past-instructions-content" class="view-mode" style="margin-bottom: 20px;"></div>
+      <button onclick="copyPastInstructions()" class="btn-primary">📋 Copy to Current Event</button>
+    </div>
+  </div>
+
+  <script src="https://cdn.quilljs.com/1.3.6/quill.js"></script>
   <script>
+    let quill;
+    let currentEventId;
+    let currentRFQ = null;
+    let selectedPastRFQ = null;
+    let isEditMode = true;
+
     // Tab switching with navigation to other pages
     const tabs = document.querySelectorAll('.tab');
     tabs.forEach(tab => {
@@ -97,106 +209,615 @@
           return;
         }
         if (tabName === "docs") {
-          // Already on docs page
           return;
         }
-        // Navigate back to event.html with the appropriate tab
+        if (tabName === "responses") {
+          window.location.href = `response.html?eventId=${eventId}`;
+          return;
+        }
         window.location.href = `event.html?id=${eventId}&tab=${tabName}`;
       });
     });
 
-    // Initialize RFQ management
+    // Initialize Quill editor
+    function initEditor() {
+      quill = new Quill('#editor', {
+        theme: 'snow',
+        modules: {
+          toolbar: [
+            [{ 'header': [1, 2, 3, 4, 5, 6, false] }],
+            [{ 'font': [] }],
+            [{ 'size': ['small', false, 'large', 'huge'] }],
+            ['bold', 'italic', 'underline', 'strike'],
+            [{ 'color': [] }, { 'background': [] }],
+            [{ 'script': 'sub'}, { 'script': 'super' }],
+            [{ 'list': 'ordered'}, { 'list': 'bullet' }],
+            [{ 'indent': '-1'}, { 'indent': '+1' }],
+            [{ 'align': [] }],
+            ['link'],
+            ['clean']
+          ]
+        },
+        placeholder: 'Write your RFQ instructions here...'
+      });
+    }
+
+    // Initialize
     async function init() {
       const params = new URLSearchParams(window.location.search);
-      const eventId = params.get('event_id');
+      currentEventId = params.get('event_id');
       
-      if (!eventId) {
+      if (!currentEventId) {
         alert('No event ID provided');
         window.location.href = 'events.html';
         return;
       }
 
-      // Load RFQ data if exists
-      await loadRFQData(eventId);
-      
-      // Setup event handlers
-      setupRFQHandlers(eventId);
+      initEditor();
+      await loadRFQData();
+      await loadAttachments();
+      setupEventHandlers();
+      updateModeButtons(); // Set initial button visibility
     }
 
-    async function loadRFQData(eventId) {
+    // Load RFQ data
+    async function loadRFQData() {
       try {
-        // TODO: Fetch RFQ data from backend when API endpoint is available
-        // const res = await authFetch(`/events/${eventId}/rfq`);
-        // const rfq = await res.json();
-        // Populate form fields with existing data
+        const res = await authFetch(`/events/${currentEventId}/rfq`);
+        if (!res.ok) throw new Error('Failed to load RFQ');
+        
+        currentRFQ = await res.json();
+        
+        if (currentRFQ && currentRFQ.rich_text_content) {
+          quill.root.innerHTML = currentRFQ.rich_text_content;
+          
+          // Populate schedule fields
+          if (currentRFQ.publish_time) {
+            document.getElementById('rfq-publish').value = formatDateTimeLocal(currentRFQ.publish_time);
+          }
+          if (currentRFQ.deadline_time) {
+            document.getElementById('rfq-deadline').value = formatDateTimeLocal(currentRFQ.deadline_time);
+          }
+          if (currentRFQ.reminder_time) {
+            document.getElementById('rfq-reminder').value = formatDateTimeLocal(currentRFQ.reminder_time);
+          }
+          
+          // Update status badge
+          updateStatusBadge();
+          
+          // Start in view mode if published
+          if (currentRFQ.published) {
+            switchToViewMode();
+          }
+        } else {
+          // No RFQ data yet, ensure status is unscheduled
+          updateStatusBadge();
+        }
       } catch (err) {
         console.error('Error loading RFQ data:', err);
+        // It's ok if there's no RFQ yet
+        updateStatusBadge();
       }
     }
 
-    function setupRFQHandlers(eventId) {
-      // Save draft button
-      document.getElementById('save-rfq-btn').addEventListener('click', async () => {
-        const rfqData = {
-          info: document.getElementById('rfq-info').value,
-          publish_date: document.getElementById('rfq-publish').value,
-          deadline: document.getElementById('rfq-deadline').value,
-          reminder: document.getElementById('rfq-reminder').value
-        };
+    // Update status badge based on published state
+    function updateStatusBadge() {
+      const statusBadge = document.getElementById('status-badge');
+      const publishBtn = document.getElementById('publish-rfq-btn');
+      const cancelBtn = document.getElementById('cancel-schedule-btn');
+      
+      if (currentRFQ && currentRFQ.published) {
+        statusBadge.textContent = 'Scheduled';
+        statusBadge.className = 'status-badge status-scheduled';
+        publishBtn.textContent = 'Update Times';
+        cancelBtn.style.display = 'inline-block';
+      } else {
+        statusBadge.textContent = 'Unscheduled';
+        statusBadge.className = 'status-badge status-unscheduled';
+        publishBtn.textContent = 'Set to Publish';
+        cancelBtn.style.display = 'none';
+      }
+    }
 
-        try {
-          // TODO: Save RFQ draft to backend
-          // await authFetch(`/events/${eventId}/rfq`, {
-          //   method: 'POST',
-          //   headers: { 'Content-Type': 'application/json' },
-          //   body: JSON.stringify(rfqData)
-          // });
-          
-          document.getElementById('rfq-status').innerHTML = 
-            '<div class="alert alert-success">Draft saved successfully!</div>';
-          
-          setTimeout(() => {
-            document.getElementById('rfq-status').innerHTML = '';
-          }, 3000);
-        } catch (err) {
-          console.error('Error saving RFQ:', err);
-          document.getElementById('rfq-status').innerHTML = 
-            '<div class="alert alert-danger">Error saving draft.</div>';
+    // Switch between edit and view mode
+    function switchToEditMode() {
+      isEditMode = true;
+      document.getElementById('edit-container').style.display = 'block';
+      document.getElementById('view-container').style.display = 'none';
+      document.getElementById('edit-mode-btn').style.display = 'none';
+      document.getElementById('view-mode-btn').style.display = 'inline-block';
+    }
+
+    function switchToViewMode() {
+      isEditMode = false;
+      const content = quill.root.innerHTML;
+      document.getElementById('instructions-display').innerHTML = content || '<div class="empty-state">No instructions have been created yet.</div>';
+      
+      // Update view mode schedule
+      updateViewSchedule();
+      
+      // Update view mode attachments
+      updateViewAttachments();
+      
+      document.getElementById('edit-container').style.display = 'none';
+      document.getElementById('view-container').style.display = 'block';
+      document.getElementById('edit-mode-btn').style.display = 'inline-block';
+      document.getElementById('view-mode-btn').style.display = 'none';
+    }
+
+    function updateViewSchedule() {
+      const publishTime = document.getElementById('rfq-publish').value;
+      const deadlineTime = document.getElementById('rfq-deadline').value;
+      const reminderTime = document.getElementById('rfq-reminder').value;
+      
+      // Show publish time at top
+      if (publishTime) {
+        document.getElementById('view-publish-date').style.display = 'block';
+        const publishDate = new Date(publishTime);
+        const now = new Date();
+        let displayText = publishDate.toLocaleString();
+        
+        // Add "(Not published yet)" if the publish time is in the future
+        if (publishDate > now) {
+          displayText += ' (Not published yet)';
         }
-      });
+        
+        document.getElementById('view-publish-time').textContent = displayText;
+      } else {
+        document.getElementById('view-publish-date').style.display = 'none';
+      }
+      
+      // Show deadline and reminder at bottom
+      if (deadlineTime || reminderTime) {
+        document.getElementById('view-deadline-reminder').style.display = 'block';
+        document.getElementById('view-deadline-time').textContent = 
+          deadlineTime ? new Date(deadlineTime).toLocaleString() : 'Not set';
+        document.getElementById('view-reminder-time').textContent = 
+          reminderTime ? new Date(reminderTime).toLocaleString() : 'Not set';
+      } else {
+        document.getElementById('view-deadline-reminder').style.display = 'none';
+      }
+    }
 
-      // Publish button
-      document.getElementById('publish-rfq-btn').addEventListener('click', async () => {
-        if (!confirm('Are you sure you want to publish this RFQ? Bidders will be notified.')) {
-          return;
-        }
+    async function updateViewAttachments() {
+      try {
+        const res = await authFetch(`/events/${currentEventId}/rfq/attachments`);
+        if (!res.ok) throw new Error('Failed to load attachments');
+        
+        const attachments = await res.json();
+        displayViewAttachments(attachments);
+      } catch (err) {
+        console.error('Error loading view attachments:', err);
+      }
+    }
 
-        const rfqData = {
-          info: document.getElementById('rfq-info').value,
-          publish_date: document.getElementById('rfq-publish').value,
-          deadline: document.getElementById('rfq-deadline').value,
-          reminder: document.getElementById('rfq-reminder').value,
-          published: true
-        };
-
-        try {
-          // TODO: Publish RFQ to backend
-          // await authFetch(`/events/${eventId}/rfq/publish`, {
-          //   method: 'POST',
-          //   headers: { 'Content-Type': 'application/json' },
-          //   body: JSON.stringify(rfqData)
-          // });
-          
-          document.getElementById('rfq-status').innerHTML = 
-            '<div class="alert alert-success">RFQ published successfully! Bidders will be notified.</div>';
-        } catch (err) {
-          console.error('Error publishing RFQ:', err);
-          document.getElementById('rfq-status').innerHTML = 
-            '<div class="alert alert-danger">Error publishing RFQ.</div>';
-        }
+    function displayViewAttachments(attachments) {
+      const listEl = document.getElementById('view-attachments-list');
+      const sectionEl = document.getElementById('view-attachments-section');
+      
+      if (attachments.length === 0) {
+        sectionEl.style.display = 'none';
+        return;
+      }
+      
+      sectionEl.style.display = 'block';
+      listEl.innerHTML = '';
+      attachments.forEach(attachment => {
+        const item = document.createElement('div');
+        item.className = 'attachment-item';
+        
+        const fileIcon = getFileIcon(attachment.mime_type);
+        const fileSize = formatFileSize(attachment.file_size);
+        
+        item.innerHTML = `
+          <div class="attachment-info">
+            <div class="attachment-icon">${fileIcon}</div>
+            <div class="attachment-details">
+              <div class="attachment-name">${escapeHtml(attachment.original_filename)}</div>
+              <div class="attachment-meta">${fileSize} • ${new Date(attachment.uploaded_at).toLocaleDateString()}</div>
+            </div>
+          </div>
+          <div class="attachment-actions">
+            <a href="${attachment.file_path}" download="${escapeHtml(attachment.original_filename)}" class="btn-icon" title="Download">
+              ⬇
+            </a>
+          </div>
+        `;
+        
+        listEl.appendChild(item);
       });
     }
 
+    function updateModeButtons() {
+      if (isEditMode) {
+        document.getElementById('edit-mode-btn').style.display = 'none';
+        document.getElementById('view-mode-btn').style.display = 'inline-block';
+      } else {
+        document.getElementById('edit-mode-btn').style.display = 'inline-block';
+        document.getElementById('view-mode-btn').style.display = 'none';
+      }
+    }
+
+    // Setup event handlers
+    function setupEventHandlers() {
+      // Edit/View mode toggle
+      document.getElementById('edit-mode-btn').addEventListener('click', switchToEditMode);
+      document.getElementById('view-mode-btn').addEventListener('click', switchToViewMode);
+
+      // Auto-fill reminder time when deadline is set
+      document.getElementById('rfq-deadline').addEventListener('change', (e) => {
+        const deadlineValue = e.target.value;
+        if (deadlineValue) {
+          const deadlineDate = new Date(deadlineValue);
+          // Subtract 1 day (24 hours)
+          const reminderDate = new Date(deadlineDate.getTime() - (24 * 60 * 60 * 1000));
+          document.getElementById('rfq-reminder').value = formatDateTimeLocal(reminderDate);
+        }
+      });
+
+      // Save draft
+      document.getElementById('save-rfq-btn').addEventListener('click', async () => {
+        await saveRFQ(false);
+      });
+
+      // Publish
+      document.getElementById('publish-rfq-btn').addEventListener('click', async () => {
+        const publishTime = document.getElementById('rfq-publish').value;
+        
+        if (!publishTime) {
+          alert('Please set a publish date & time before setting to publish.');
+          return;
+        }
+        
+        const isUpdate = currentRFQ && currentRFQ.published;
+        const confirmMessage = isUpdate 
+          ? 'Are you sure you want to update the schedule times?' 
+          : 'Are you sure you want to schedule these instructions for publishing?';
+        
+        if (!confirm(confirmMessage)) {
+          return;
+        }
+        await saveRFQ(true);
+      });
+
+      // Cancel schedule
+      document.getElementById('cancel-schedule-btn').addEventListener('click', async () => {
+        if (!confirm('Are you sure you want to cancel the schedule? This will unpublish the RFQ.')) {
+          return;
+        }
+        await cancelSchedule();
+      });
+
+      // View past instructions
+      document.getElementById('view-past-btn').addEventListener('click', openPastInstructionsModal);
+
+      // Attachment upload
+      document.getElementById('upload-attachment-btn').addEventListener('click', () => {
+        document.getElementById('attachment-upload').click();
+      });
+
+      document.getElementById('attachment-upload').addEventListener('change', async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        await uploadAttachment(file);
+        e.target.value = ''; // Reset input
+      });
+    }
+
+    // Save RFQ
+    async function saveRFQ(publish = false) {
+      const rfqData = {
+        rich_text_content: quill.root.innerHTML,
+        info: quill.getText(), // Plain text version for backwards compatibility
+        publish_time: document.getElementById('rfq-publish').value || null,
+        deadline_time: document.getElementById('rfq-deadline').value || null,
+        reminder_time: document.getElementById('rfq-reminder').value || null
+      };
+
+      try {
+        const endpoint = publish 
+          ? `/events/${currentEventId}/rfq/publish` 
+          : `/events/${currentEventId}/rfq`;
+        
+        const res = await authFetch(endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(rfqData)
+        });
+
+        if (!res.ok) throw new Error('Failed to save RFQ');
+        
+        currentRFQ = await res.json();
+        
+        // Update status badge
+        updateStatusBadge();
+        
+        const statusEl = document.getElementById('rfq-status');
+        if (publish) {
+          statusEl.innerHTML = '<div class="alert alert-success">Instructions scheduled for publishing!</div>';
+          switchToViewMode();
+        } else {
+          statusEl.innerHTML = '<div class="alert alert-success">Draft saved successfully!</div>';
+        }
+        
+        setTimeout(() => {
+          statusEl.innerHTML = '';
+        }, 3000);
+      } catch (err) {
+        console.error('Error saving RFQ:', err);
+        document.getElementById('rfq-status').innerHTML = 
+          '<div class="alert alert-danger">Error saving instructions.</div>';
+      }
+    }
+
+    // Cancel schedule
+    async function cancelSchedule() {
+      const rfqData = {
+        rich_text_content: quill.root.innerHTML,
+        info: quill.getText(),
+        publish_time: document.getElementById('rfq-publish').value || null,
+        deadline_time: document.getElementById('rfq-deadline').value || null,
+        reminder_time: document.getElementById('rfq-reminder').value || null
+      };
+
+      try {
+        const res = await authFetch(`/events/${currentEventId}/rfq`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(rfqData)
+        });
+
+        if (!res.ok) throw new Error('Failed to cancel schedule');
+        
+        currentRFQ = await res.json();
+        
+        // Update status badge
+        updateStatusBadge();
+        
+        const statusEl = document.getElementById('rfq-status');
+        statusEl.innerHTML = '<div class="alert alert-success">Schedule cancelled. RFQ is now unscheduled.</div>';
+        
+        setTimeout(() => {
+          statusEl.innerHTML = '';
+        }, 3000);
+      } catch (err) {
+        console.error('Error cancelling schedule:', err);
+        document.getElementById('rfq-status').innerHTML = 
+          '<div class="alert alert-danger">Error cancelling schedule.</div>';
+      }
+    }
+
+    // Past instructions modal
+    async function openPastInstructionsModal() {
+      document.getElementById('past-instructions-modal').style.display = 'flex';
+      await loadPastInstructions();
+    }
+
+    function closePastInstructionsModal() {
+      document.getElementById('past-instructions-modal').style.display = 'none';
+    }
+
+    async function loadPastInstructions() {
+      const listEl = document.getElementById('past-instructions-list');
+      listEl.innerHTML = '<div class="empty-state">Loading...</div>';
+      
+      try {
+        const res = await authFetch(`/events/${currentEventId}/rfq/past`);
+        if (!res.ok) throw new Error('Failed to load past instructions');
+        
+        const pastRFQs = await res.json();
+        
+        if (pastRFQs.length === 0) {
+          listEl.innerHTML = '<div class="empty-state">No past instructions found for this organisation and category.</div>';
+          return;
+        }
+        
+        listEl.innerHTML = '';
+        pastRFQs.forEach(rfq => {
+          const item = document.createElement('div');
+          item.className = 'past-rfq-item';
+          item.innerHTML = `
+            <div class="past-rfq-title">${escapeHtml(rfq.event_title)}</div>
+            <div class="past-rfq-date">
+              Published: ${new Date(rfq.published_date).toLocaleDateString()}
+            </div>
+          `;
+          item.onclick = () => viewPastInstruction(rfq);
+          listEl.appendChild(item);
+        });
+      } catch (err) {
+        console.error('Error loading past instructions:', err);
+        listEl.innerHTML = '<div class="empty-state">Error loading past instructions.</div>';
+      }
+    }
+
+    function viewPastInstruction(rfq) {
+      selectedPastRFQ = rfq;
+      document.getElementById('past-event-title').textContent = rfq.event_title;
+      document.getElementById('past-published-date').textContent = 
+        'Published: ' + new Date(rfq.published_date).toLocaleString();
+      document.getElementById('past-instructions-content').innerHTML = 
+        rfq.rich_text_content || '<div class="empty-state">No content available.</div>';
+      
+      closePastInstructionsModal();
+      document.getElementById('view-past-modal').style.display = 'flex';
+    }
+
+    function closeViewPastModal() {
+      document.getElementById('view-past-modal').style.display = 'none';
+      selectedPastRFQ = null;
+    }
+
+    function copyPastInstructions() {
+      if (!selectedPastRFQ) return;
+      
+      if (!confirm('This will replace your current instructions. Continue?')) {
+        return;
+      }
+      
+      quill.root.innerHTML = selectedPastRFQ.rich_text_content || '';
+      closeViewPastModal();
+      switchToEditMode();
+      
+      document.getElementById('rfq-status').innerHTML = 
+        '<div class="alert alert-info">Instructions copied. Remember to save your changes.</div>';
+      setTimeout(() => {
+        document.getElementById('rfq-status').innerHTML = '';
+      }, 5000);
+    }
+
+    // Utility functions
+    function formatDateTimeLocal(dateString) {
+      const date = new Date(dateString);
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const day = String(date.getDate()).padStart(2, '0');
+      const hours = String(date.getHours()).padStart(2, '0');
+      const minutes = String(date.getMinutes()).padStart(2, '0');
+      return `${year}-${month}-${day}T${hours}:${minutes}`;
+    }
+
+    function escapeHtml(text) {
+      const map = {
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#039;'
+      };
+      return text.replace(/[&<>"']/g, m => map[m]);
+    }
+
+    // Attachment management functions
+    async function loadAttachments() {
+      try {
+        const res = await authFetch(`/events/${currentEventId}/rfq/attachments`);
+        if (!res.ok) throw new Error('Failed to load attachments');
+        
+        const attachments = await res.json();
+        displayAttachments(attachments);
+      } catch (err) {
+        console.error('Error loading attachments:', err);
+      }
+    }
+
+    function displayAttachments(attachments) {
+      const listEl = document.getElementById('attachments-list');
+      
+      if (attachments.length === 0) {
+        listEl.innerHTML = '<div class="empty-state" style="padding: 20px;">No attachments yet.</div>';
+        return;
+      }
+
+      listEl.innerHTML = '';
+      attachments.forEach(attachment => {
+        const item = document.createElement('div');
+        item.className = 'attachment-item';
+        
+        const fileIcon = getFileIcon(attachment.mime_type);
+        const fileSize = formatFileSize(attachment.file_size);
+        
+        item.innerHTML = `
+          <div class="attachment-info">
+            <div class="attachment-icon">${fileIcon}</div>
+            <div class="attachment-details">
+              <div class="attachment-name">${escapeHtml(attachment.original_filename)}</div>
+              <div class="attachment-meta">${fileSize} • ${new Date(attachment.uploaded_at).toLocaleDateString()}</div>
+            </div>
+          </div>
+          <div class="attachment-actions">
+            <a href="${attachment.file_path}" download="${escapeHtml(attachment.original_filename)}" class="btn-icon" title="Download">
+              ⬇
+            </a>
+            <button onclick="deleteAttachment(${attachment.id})" class="btn-icon btn-delete" title="Delete">
+              🗑
+            </button>
+          </div>
+        `;
+        
+        listEl.appendChild(item);
+      });
+    }
+
+    async function uploadAttachment(file) {
+      const formData = new FormData();
+      formData.append('document', file);
+
+      try {
+        const res = await authFetch(`/events/${currentEventId}/rfq/attachments`, {
+          method: 'POST',
+          body: formData
+        });
+
+        if (!res.ok) {
+          const error = await res.json();
+          throw new Error(error.error || 'Failed to upload');
+        }
+
+        await loadAttachments();
+        
+        const statusEl = document.getElementById('rfq-status');
+        statusEl.innerHTML = '<div class="alert alert-success">Document uploaded successfully!</div>';
+        setTimeout(() => {
+          statusEl.innerHTML = '';
+        }, 3000);
+      } catch (err) {
+        console.error('Error uploading attachment:', err);
+        alert('Error uploading document: ' + err.message);
+      }
+    }
+
+    async function deleteAttachment(attachmentId) {
+      if (!confirm('Are you sure you want to delete this attachment?')) {
+        return;
+      }
+
+      try {
+        const res = await authFetch(`/events/${currentEventId}/rfq/attachments/${attachmentId}`, {
+          method: 'DELETE'
+        });
+
+        if (!res.ok) throw new Error('Failed to delete');
+
+        await loadAttachments();
+        
+        const statusEl = document.getElementById('rfq-status');
+        statusEl.innerHTML = '<div class="alert alert-success">Document deleted successfully!</div>';
+        setTimeout(() => {
+          statusEl.innerHTML = '';
+        }, 3000);
+      } catch (err) {
+        console.error('Error deleting attachment:', err);
+        alert('Error deleting document: ' + err.message);
+      }
+    }
+
+    function getFileIcon(mimeType) {
+      if (!mimeType) return '📄';
+      
+      if (mimeType.includes('pdf')) return '📕';
+      if (mimeType.includes('word') || mimeType.includes('document')) return '📘';
+      if (mimeType.includes('excel') || mimeType.includes('spreadsheet')) return '📗';
+      if (mimeType.includes('powerpoint') || mimeType.includes('presentation')) return '📙';
+      if (mimeType.includes('image')) return '🖼';
+      if (mimeType.includes('zip') || mimeType.includes('compressed')) return '📦';
+      if (mimeType.includes('text')) return '📝';
+      
+      return '📄';
+    }
+
+    function formatFileSize(bytes) {
+      if (!bytes) return '0 B';
+      
+      const k = 1024;
+      const sizes = ['B', 'KB', 'MB', 'GB'];
+      const i = Math.floor(Math.log(bytes) / Math.log(k));
+      
+      return Math.round((bytes / Math.pow(k, i)) * 100) / 100 + ' ' + sizes[i];
+    }
+
+    // Initialize on load
     init();
   </script>
 

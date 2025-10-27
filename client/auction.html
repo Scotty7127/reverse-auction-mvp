@@ -37,6 +37,7 @@
     <div class="tab" data-tab="lines">All Line Items</div>
     <div class="tab" data-tab="members">Members</div>
     <div class="tab" data-tab="docs">Documents</div>
+    <div class="tab" data-tab="responses">Responses</div>
     <div class="tab active" data-tab="pricing">Pricing</div>
   </div>
 
@@ -539,6 +540,11 @@
           if (tabName === "docs") {
             // Navigate to docs.html
             window.location.href = `docs.html?event_id=${eventId}`;
+            return;
+          }
+          if (tabName === "responses") {
+            // Navigate to response.html
+            window.location.href = `response.html?eventId=${eventId}`;
             return;
           }
           // Navigate to event.html with the selected tab

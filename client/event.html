@@ -36,6 +36,7 @@
     <div class="tab" data-tab="lines">All Line Items</div>
     <div class="tab" data-tab="members">Members</div>
     <div class="tab" data-tab="docs">Documents</div>
+    <div class="tab" data-tab="responses">Responses</div>
     <div class="tab" data-tab="pricing">Pricing</div>
   </div>
 
@@ -108,6 +109,10 @@
         }
         if (tabName === "docs") {
           window.location.href = `docs.html?event_id=${eventId}`;
+          return;
+        }
+        if (tabName === "responses") {
+          window.location.href = `response.html?eventId=${eventId}`;
           return;
         }
         tabs.forEach(t => t.classList.remove('active'));
