@@ -91,13 +91,30 @@ function initChart(canvasId, baselineValue = null, currencySymbol = '£') {
       plugins: {
         legend: { position: 'bottom' },
         tooltip: {
+          displayColors: true,
           callbacks: {
+            title: ctx => {
+              // Show price as the title
+              if (!ctx || ctx.length === 0) return '';
+              const point = ctx[0];
+              const d = point.raw;
+              if (!d) return '';
+              const price = d.y;
+              return `${currencySymbol}${price.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+            },
             label: ctx => {
+              // Show "Org Name @ time" or "Org Name - Opening Bid"
               const d = ctx.raw;
               if (!d) return '';
               const name = ctx.dataset.label || 'Bidder';
-              const y = d.y.toFixed(2);
-              return `${name}: ${y}`;
+              const time = d.x ? `${d.x.toFixed(1)}m` : '';
+              
+              // Check if this is an opening bid
+              if (name.toLowerCase().includes('opening') || d.isOpening) {
+                return `${name} - Opening Bid`;
+              }
+              
+              return `${name} @ ${time}`;
             }
           }
         },
@@ -153,7 +170,7 @@ function getRandomColor(seed) {
 
 // Helper: Aggregate total extended bid over time for a bidder
 function aggregateTotalPriceSeries(bids) {
-  // bids: array of { time, extendedBid, line_item_id }
+  // bids: array of { time, extendedBid, line_item_id, rawBid }
   if (!Array.isArray(bids) || bids.length === 0) return [];
   const sorted = bids.slice().sort((a, b) => a.time - b.time);
   const currentByLine = new Map();
@@ -166,8 +183,14 @@ function aggregateTotalPriceSeries(bids) {
     currentByLine.forEach(v => { if (Number.isFinite(v)) total += v; });
     if (series.length && series[series.length - 1].x === t) {
       series[series.length - 1].y = total;
+      // Keep the most recent bid info for this time point
+      series[series.length - 1].isOpening = b.rawBid?.id?.toString().startsWith('opening-');
     } else {
-      series.push({ x: t, y: total });
+      series.push({ 
+        x: t, 
+        y: total,
+        isOpening: b.rawBid?.id?.toString().startsWith('opening-')
+      });
     }
   }
   return series;
@@ -221,13 +244,29 @@ function showSavingsByBidder(biddersMap, currencySymbol = '£', baselineValue = 
   // ticks show actual prices
   chart.options.scales.y.ticks.callback = v =>
     `${currencySymbol}${v.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
-  // Tooltip label shows actual price
+  
+  // Tooltip callbacks - same format as main chart
+  chart.options.plugins.tooltip.callbacks.title = ctx => {
+    if (!ctx || ctx.length === 0) return '';
+    const point = ctx[0];
+    const d = point.raw;
+    if (!d) return '';
+    const price = d.y;
+    return `${currencySymbol}${price.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+  };
+  
   chart.options.plugins.tooltip.callbacks.label = ctx => {
     const d = ctx.raw;
     if (!d) return '';
     const name = ctx.dataset.label || 'Bidder';
-    const yActual = d.y;
-    return `${name}: ${currencySymbol}${yActual.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+    const time = d.x ? `${d.x.toFixed(1)}m` : '';
+    
+    // Check if this is an opening bid
+    if (name.toLowerCase().includes('opening') || d.isOpening) {
+      return `${name} - Opening Bid`;
+    }
+    
+    return `${name} @ ${time}`;
   };
 
   // Update the chart to apply all changes
@@ -377,5 +416,6 @@ window.AuctionGraphs = {
   clearChart,
   startXAxisExpansion,
   stopXAxisExpansion,
-  resetXAxisTracking
+  resetXAxisTracking,
+  getColorForBidder: getRandomColor  // Export color function for use in rankings
 };
