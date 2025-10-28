@@ -423,7 +423,42 @@ module.exports = (io) => {
       if (eventResult.rows.length === 0) {
         return res.status(404).json({ error: "Event not found" });
       }
-      res.json(eventResult.rows[0]);
+
+      const event = eventResult.rows[0];
+
+      // Load line items for this event
+      const lineItemsResult = await pool.query(
+        `SELECT li.*, l.title AS lot_title
+         FROM lots l
+         JOIN line_items li ON li.lot_id = l.id
+         WHERE l.event_id = $1
+         ORDER BY l.id, li.id`,
+        [req.params.id]
+      );
+      event.line_items = lineItemsResult.rows;
+
+      // Load supplier assignments (with opening bids and weightings)
+      const supplierAssignmentsResult = await pool.query(
+        `SELECT 
+           s.supplier_id,
+           s.line_item_id,
+           s.weighting,
+           s.opening_bid,
+           u.first_name,
+           u.last_name,
+           u.email
+         FROM supplier_line_item_settings s
+         JOIN users u ON s.supplier_id = u.id
+         WHERE s.event_id = $1
+         ORDER BY s.supplier_id, s.line_item_id`,
+        [req.params.id]
+      );
+      event.supplier_assignments = supplierAssignmentsResult.rows.map(s => ({
+        ...s,
+        supplier_name: `${(s.first_name || '').trim()} ${(s.last_name || '').trim()}`.trim() || s.email || `Supplier ${s.supplier_id}`
+      }));
+
+      res.json(event);
     } catch (err) {
       console.error("Error fetching event:", err);
       res.status(500).json({ error: err.message });
@@ -475,17 +510,25 @@ module.exports = (io) => {
           b.amount, 
           b.created_at,
           b.line_item_id,
-          b.user_id AS bidder_id, 
+          b.user_id, 
           u.first_name, 
           u.last_name, 
-          u.email
+          u.email,
+          COALESCE(s.weighting, 1.0) AS weighting
         FROM bids b
         LEFT JOIN users u ON b.user_id = u.id
+        LEFT JOIN supplier_line_item_settings s ON s.event_id = b.event_id 
+          AND s.line_item_id = b.line_item_id 
+          AND s.supplier_id = b.user_id
         WHERE b.event_id = $1
         ORDER BY b.created_at DESC
       `;
       const bidsResult = await pool.query(bidsQuery, [eventId]);
-      let bids = bidsResult.rows;
+      let bids = bidsResult.rows.map(b => ({
+        ...b,
+        bidder_id: b.user_id,
+        user_name: `${(b.first_name || '').trim()} ${(b.last_name || '').trim()}`.trim() || b.email || `User ${b.user_id}`
+      }));
 
       if (role === "bidder") {
         bids = bids.filter((b) => b.bidder_id === userId);

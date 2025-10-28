@@ -2,12 +2,42 @@
 // Handles all Chart.js graph rendering for auction.html
 // Requires Chart.js Annotation plugin (to be included separately via CDN in HTML)
 
+// Wait for everything to load and register the annotation plugin
+(function() {
+  function tryRegisterPlugin() {
+    const annotationPlugin = window['chartjs-plugin-annotation'];
+    if (typeof Chart !== 'undefined' && annotationPlugin) {
+      try {
+        Chart.register(annotationPlugin.default || annotationPlugin);
+        console.log('✓ Chart.js Annotation plugin registered successfully');
+        console.log('✓ Chart.js version:', Chart.version);
+        console.log('✓ Registered plugins:', Chart.registry.plugins.keys());
+      } catch (e) {
+        console.error('✗ Failed to register annotation plugin:', e);
+      }
+    } else {
+      console.warn('⚠ Waiting for Chart.js or annotation plugin...', {
+        Chart: typeof Chart !== 'undefined',
+        annotationPlugin: !!annotationPlugin
+      });
+      setTimeout(tryRegisterPlugin, 100);
+    }
+  }
+  
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', tryRegisterPlugin);
+  } else {
+    tryRegisterPlugin();
+  }
+})();
+
 let chart = null;
 let ctx = null;
 let xScaleInterval = null;
 let currentBaselineValue = null;
 
 function initChart(canvasId, baselineValue = null, currencySymbol = '£') {
+  console.log('initChart called with baselineValue:', baselineValue);
   const el = document.getElementById(canvasId);
   if (!el) {
     console.error(`Canvas with id ${canvasId} not found.`);
@@ -25,6 +55,9 @@ function initChart(canvasId, baselineValue = null, currencySymbol = '£') {
       try { existing.destroy(); } catch (e) { console.warn('Existing chart destroy failed (ignored):', e); }
     }
   }
+  
+  console.log('Creating chart with baseline annotation at y =', baselineValue);
+  
   ctx = el.getContext('2d');
   chart = new Chart(ctx, {
     type: 'line',
@@ -64,54 +97,29 @@ function initChart(canvasId, baselineValue = null, currencySymbol = '£') {
           }
         },
         annotation: {
-          annotations: {
-            baseline: {
+          annotations: baselineValue ? {
+            baselineLine: {
               type: 'line',
-              yMin: 0,
-              yMax: 0,
-              borderColor: 'green',
-              borderWidth: 2,
-              label: {
-                enabled: true,
-                content: 'Baseline (0)',
-                position: 'start',
-                backgroundColor: 'green',
-                color: 'white',
-                font: { weight: 'bold' }
-              },
-              drawTime: 'afterDatasetsDraw',
-              scaleID: 'y'
-            },
-            reserve: {
-              type: 'line',
-              yMin: 0,
-              yMax: 0,
-              borderColor: 'red',
-              borderWidth: 2,
-              label: {
-                enabled: true,
-                content: 'Reserve',
-                position: 'start',
-                backgroundColor: 'red',
-                color: 'white',
-                font: { weight: 'bold' }
-              },
-              drawTime: 'afterDatasetsDraw',
-              scaleID: 'y',
-              display: false
+              yMin: baselineValue,
+              yMax: baselineValue,
+              xMin: 0,
+              xMax: 10,
+              borderColor: 'rgba(34, 197, 94, 0.5)',
+              borderWidth: 3,
+              borderDash: []
             }
-          }
+          } : {},
+          clip: false
         }
       }
     }
   });
+  
+  console.log('Chart created. Checking annotation config:', chart.options.plugins.annotation);
 
-  if (baselineValue !== null && baselineValue !== currentBaselineValue) {
+  if (baselineValue !== null) {
     currentBaselineValue = baselineValue;
-    chart.options.plugins.annotation.annotations.baseline.yMin = baselineValue;
-    chart.options.plugins.annotation.annotations.baseline.yMax = baselineValue;
-    chart.options.plugins.annotation.annotations.baseline.label.content =
-      `Baseline (${currencySymbol}${baselineValue.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})})`;
+    console.log('Baseline annotation should be at y =', baselineValue);
     chart.update('none');
   }
 
@@ -187,13 +195,26 @@ function showSavingsByBidder(biddersMap, currencySymbol = '£', baselineValue = 
 
   updateChart(datasets);
 
-  if (baselineValue !== null && baselineValue !== currentBaselineValue) {
-    currentBaselineValue = baselineValue;
-    // baseline annotation line at y = baselineValue
-    chart.options.plugins.annotation.annotations.baseline.yMin = baselineValue;
-    chart.options.plugins.annotation.annotations.baseline.yMax = baselineValue;
-    chart.options.plugins.annotation.annotations.baseline.label.content =
-      `Baseline (${currencySymbol}${baselineValue.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})})`;
+  // Update baseline annotation if it exists
+  if (chart.options.plugins?.annotation?.annotations) {
+    if (baselineValue !== null) {
+      currentBaselineValue = baselineValue;
+      
+      // Create or update baseline annotation
+      chart.options.plugins.annotation.annotations.baselineLine = {
+        type: 'line',
+        yMin: baselineValue,
+        yMax: baselineValue,
+        xMin: 0,
+        xMax: chart.options.scales.x.max || 10,
+        borderColor: 'rgba(34, 197, 94, 0.5)',
+        borderWidth: 3,
+        borderDash: []
+      };
+      console.log('Updated baseline annotation to y =', baselineValue);
+    } else if (chart.options.plugins.annotation.annotations.baselineLine) {
+      delete chart.options.plugins.annotation.annotations.baselineLine;
+    }
   }
 
   // ticks show actual prices
@@ -208,17 +229,8 @@ function showSavingsByBidder(biddersMap, currencySymbol = '£', baselineValue = 
     return `${name}: ${currencySymbol}${yActual.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
   };
 
-  if (chart.options.plugins.annotation?.annotations) {
-    // reserve annotation logic unchanged
-    if (reserveValue !== null) {
-      chart.options.plugins.annotation.annotations.reserve.yMin = reserveValue;
-      chart.options.plugins.annotation.annotations.reserve.yMax = reserveValue;
-      chart.options.plugins.annotation.annotations.reserve.display = true;
-    } else {
-      chart.options.plugins.annotation.annotations.reserve.display = false;
-    }
-    chart.update('none');
-  }
+  // Update the chart to apply all changes
+  chart.update('none');
 }
 
 // 2️⃣ Specific Line Item Chart
