@@ -247,8 +247,8 @@
           setPauseButtonState(false);
           auctionEnd = new Date(auctionStart.getTime() + auctionDurationMs);
           timeSubEl.textContent = '';
-          // Start the x-axis expansion now that auction is live
-          AuctionGraphs.startXAxisExpansion();
+          // Start the x-axis expansion now that auction is live, passing actual start time
+          AuctionGraphs.startXAxisExpansion(auctionStart);
         }
       }
       if(auctionLive){
@@ -655,7 +655,7 @@
         }
         auctionPaused = false;
         setPauseButtonState(false);
-        AuctionGraphs.startXAxisExpansion();
+        AuctionGraphs.startXAxisExpansion(auctionStart);
         updateChartAndTable();
       });
 
@@ -789,6 +789,12 @@
         updateCountdown();
       }, 1000);
       updateCountdown();
+      
+      // If auction is already live when page loads, start x-axis tracking
+      if (auctionLive && !auctionPaused && auctionStart) {
+        console.log('Auction already live on page load, starting x-axis tracking');
+        AuctionGraphs.startXAxisExpansion(auctionStart);
+      }
     });
   </script>
 </body>
