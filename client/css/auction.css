@@ -105,6 +105,14 @@ body {
   color: #1e293b;
 }
 
+.stat-subtitle {
+  display: block;
+  font-size: 0.6875rem;
+  color: #6b7280;
+  margin-top: 4px;
+  font-weight: 400;
+}
+
 /* === Chart Container === */
 .chart-container {
   background: #ffffff;

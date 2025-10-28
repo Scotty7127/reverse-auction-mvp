@@ -57,6 +57,17 @@ module.exports = (io) => {
         return res.status(400).json({ error: "Invalid bid amount" });
       }
 
+      // Get event details to check for extension
+      const eventRes = await pool.query(
+        `SELECT auction_end_time, 
+                EXTRACT(EPOCH FROM extension_time)::int AS extension_time,
+                EXTRACT(EPOCH FROM extension_threshold)::int AS extension_threshold,
+                type
+         FROM events WHERE id = $1`,
+        [eventId]
+      );
+      const event = eventRes.rows[0];
+
       const result = await pool.query(
         `INSERT INTO bids (event_id, user_id, line_item_id, amount)
          VALUES ($1, $2, $3, $4)
@@ -66,7 +77,10 @@ module.exports = (io) => {
 
       const bid = result.rows[0];
       const ures = await pool.query(
-        `SELECT first_name, last_name, email FROM users WHERE id=$1`,
+        `SELECT u.first_name, u.last_name, u.email, o.name AS organisation_name 
+         FROM users u
+         LEFT JOIN organisations o ON u.organisation_id = o.id
+         WHERE u.id=$1`,
         [userId]
       );
       const u = ures.rows[0] || {};
@@ -74,9 +88,42 @@ module.exports = (io) => {
         `${(u.first_name || "").trim()} ${(u.last_name || "").trim()}`.trim() ||
         u.email ||
         `User ${userId}`;
-      const enriched = { ...bid, display_name };
+      const enriched = { 
+        ...bid, 
+        display_name,
+        user_name: u.organisation_name || `[NO ORG] ${u.email || userId}`,
+        organisation_name: u.organisation_name,
+        first_name: u.first_name,
+        last_name: u.last_name,
+        email: u.email
+      };
+
+      // Check if extension should be triggered
+      let extensionTriggered = false;
+      if (event && event.auction_end_time && event.type !== 'paused') {
+        const now = new Date();
+        const endTime = new Date(event.auction_end_time);
+        const timeRemaining = (endTime - now) / 1000; // in seconds
+        const extensionThreshold = event.extension_threshold || 60;
+        const extensionTime = event.extension_time || 120;
+
+        if (timeRemaining > 0 && timeRemaining <= extensionThreshold) {
+          // Trigger extension - reset end time to now + extension_time
+          const newEndTime = new Date(now.getTime() + (extensionTime * 1000));
+          await pool.query(
+            `UPDATE events SET auction_end_time = $1 WHERE id = $2`,
+            [newEndTime, eventId]
+          );
+          extensionTriggered = true;
+          io.to(`event_${eventId}`).emit("auction_extended", {
+            newEndTime: newEndTime.toISOString(),
+            extensionTime
+          });
+        }
+      }
+
       io.to(`event_${eventId}`).emit("bid_update", enriched);
-      res.json(enriched);
+      res.json({ ...enriched, extensionTriggered });
     } catch (err) {
       console.error("Error submitting bid:", err);
       res.status(500).json({ error: "Failed to submit bid" });
@@ -94,8 +141,22 @@ module.exports = (io) => {
         return res.status(400).json({ error: "No bids provided" });
       }
 
+      // Get event details to check for extension
+      const eventRes = await pool.query(
+        `SELECT auction_end_time, 
+                EXTRACT(EPOCH FROM extension_time)::int AS extension_time,
+                EXTRACT(EPOCH FROM extension_threshold)::int AS extension_threshold,
+                type
+         FROM events WHERE id = $1`,
+        [eventId]
+      );
+      const event = eventRes.rows[0];
+
       const ures = await pool.query(
-        `SELECT first_name, last_name, email FROM users WHERE id=$1`,
+        `SELECT u.first_name, u.last_name, u.email, o.name AS organisation_name 
+         FROM users u
+         LEFT JOIN organisations o ON u.organisation_id = o.id
+         WHERE u.id=$1`,
         [userId]
       );
       const u = ures.rows[0] || {};
@@ -105,6 +166,8 @@ module.exports = (io) => {
         `User ${userId}`;
 
       const insertedBids = [];
+      let extensionTriggered = false;
+
       for (const bid of bids) {
         const { line_item_id, amount } = bid;
         if (!line_item_id || isNaN(amount)) continue;
@@ -115,12 +178,43 @@ module.exports = (io) => {
            RETURNING *`,
           [eventId, userId, line_item_id, amount]
         );
-        const enriched = { ...result.rows[0], display_name };
+        const enriched = { 
+          ...result.rows[0], 
+          display_name,
+          user_name: u.organisation_name || `[NO ORG] ${u.email || userId}`,
+          organisation_name: u.organisation_name,
+          first_name: u.first_name,
+          last_name: u.last_name,
+          email: u.email
+        };
         insertedBids.push(enriched);
         io.to(`event_${eventId}`).emit("bid_update", enriched);
       }
 
-      res.json({ success: true, inserted: insertedBids.length });
+      // Check if extension should be triggered (check once after all bids)
+      if (event && event.auction_end_time && event.type !== 'paused' && !extensionTriggered) {
+        const now = new Date();
+        const endTime = new Date(event.auction_end_time);
+        const timeRemaining = (endTime - now) / 1000; // in seconds
+        const extensionThreshold = event.extension_threshold || 60;
+        const extensionTime = event.extension_time || 120;
+
+        if (timeRemaining > 0 && timeRemaining <= extensionThreshold) {
+          // Trigger extension - reset end time to now + extension_time
+          const newEndTime = new Date(now.getTime() + (extensionTime * 1000));
+          await pool.query(
+            `UPDATE events SET auction_end_time = $1 WHERE id = $2`,
+            [newEndTime, eventId]
+          );
+          extensionTriggered = true;
+          io.to(`event_${eventId}`).emit("auction_extended", {
+            newEndTime: newEndTime.toISOString(),
+            extensionTime
+          });
+        }
+      }
+
+      res.json({ success: true, inserted: insertedBids.length, extensionTriggered });
     } catch (err) {
       console.error("Error submitting bulk bids:", err);
       res.status(500).json({ error: "Failed to submit bulk bids" });
@@ -176,6 +270,27 @@ module.exports = (io) => {
     }
   });
 
+  // === Initialize Auction End Time ===
+  router.patch("/events/:id/initialize-end-time", ensureAuthenticated, async (req, res) => {
+    try {
+      const eventId = req.params.id;
+      const { auction_end_time } = req.body;
+
+      if (!auction_end_time) {
+        return res.status(400).json({ error: "auction_end_time is required" });
+      }
+
+      await pool.query(
+        "UPDATE events SET auction_end_time = $1 WHERE id = $2 AND auction_end_time IS NULL",
+        [auction_end_time, eventId]
+      );
+      
+      res.json({ success: true });
+    } catch (err) {
+      console.error("Error initializing auction end time:", err);
+      res.status(500).json({ error: "Failed to initialize auction end time" });
+    }
+  });
   // === Edit a Bid (Manager only) ===
   router.patch("/events/:eventId/bids/:bidId", ensureAuthenticated, async (req, res) => {
     try {
@@ -721,6 +836,96 @@ module.exports = (io) => {
     }
   });
 
+  // === Get Bidder's Assigned Line Items ===
+  router.get("/events/:id/bidder-lineitems", ensureAuthenticated, async (req, res) => {
+    try {
+      const eventId = req.params.id;
+      const userId = req.user.id;
+
+      const result = await pool.query(`
+        SELECT 
+          li.id,
+          li.item_number,
+          li.item_name AS name,
+          li.quantity,
+          li.ext_quantity,
+          li.baseline,
+          li.ext_baseline,
+          COALESCE(
+            (
+              SELECT amount 
+              FROM bids 
+              WHERE event_id = $1 
+                AND user_id = $2 
+                AND line_item_id = li.id 
+              ORDER BY created_at DESC 
+              LIMIT 1
+            ),
+            slis.opening_bid
+          ) AS current_bid,
+          (
+            SELECT COUNT(*) + 1
+            FROM bids b2
+            WHERE b2.event_id = $1 
+              AND b2.line_item_id = li.id
+              AND b2.amount < COALESCE((
+                SELECT amount 
+                FROM bids 
+                WHERE event_id = $1 
+                  AND user_id = $2 
+                  AND line_item_id = li.id 
+                ORDER BY created_at DESC 
+                LIMIT 1
+              ), slis.opening_bid, 999999999)
+          ) AS rank
+        FROM lots l
+        JOIN line_items li ON li.lot_id = l.id
+        INNER JOIN bidder_item_assignments bia ON bia.line_item_id = li.id AND bia.user_id = $2
+        LEFT JOIN supplier_line_item_settings slis ON slis.line_item_id = li.id AND slis.supplier_id = $2 AND slis.event_id = $1
+        WHERE l.event_id = $1
+        ORDER BY li.id ASC
+      `, [eventId, userId]);
+
+      res.json(result.rows);
+    } catch (err) {
+      console.error("Error fetching bidder line items:", err);
+      res.status(500).json({ error: "Failed to fetch bidder line items" });
+    }
+  });
+
+  // === Get Line Item Rank for Current Bidder ===
+  router.get("/events/:id/line-items/:lineItemId/rank", ensureAuthenticated, async (req, res) => {
+    try {
+      const eventId = req.params.id;
+      const lineItemId = req.params.lineItemId;
+      const userId = req.user.id;
+
+      const result = await pool.query(`
+        SELECT 
+          (
+            SELECT COUNT(*) + 1
+            FROM bids b2
+            WHERE b2.event_id = $1 
+              AND b2.line_item_id = $2
+              AND b2.amount < COALESCE((
+                SELECT amount 
+                FROM bids 
+                WHERE event_id = $1 
+                  AND user_id = $3 
+                  AND line_item_id = $2 
+                ORDER BY created_at DESC 
+                LIMIT 1
+              ), (SELECT opening_bid FROM supplier_line_item_settings WHERE event_id = $1 AND line_item_id = $2 AND supplier_id = $3), 999999999)
+          ) AS rank
+      `, [eventId, lineItemId, userId]);
+
+      res.json({ rank: result.rows[0]?.rank || null });
+    } catch (err) {
+      console.error("Error fetching line item rank:", err);
+      res.status(500).json({ error: "Failed to fetch line item rank" });
+    }
+  });
+
   // === Get Event Members ===
   router.get("/events/:id/members", ensureAuthenticated, async (req, res) => {
     try {
@@ -834,6 +1039,51 @@ module.exports = (io) => {
     } catch (err) {
       console.error("Error deleting event:", err);
       res.status(500).json({ error: "Failed to delete event" });
+    }
+  });
+
+  // === DEBUG: Reset auction to start now ===
+  router.post("/events/:id/debug-reset", ensureAuthenticated, async (req, res) => {
+    try {
+      const { id } = req.params;
+
+      // Only managers can reset
+      if (req.user.role !== "manager") {
+        return res.status(403).json({ error: "Only managers can reset auctions" });
+      }
+
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+
+        // Delete all bids for this event
+        await client.query('DELETE FROM bids WHERE event_id = $1', [id]);
+
+        // Set auction_time to now and clear auction_end_time
+        const now = new Date();
+        await client.query(`
+          UPDATE events 
+          SET auction_time = $1, 
+              auction_end_time = NULL,
+              is_paused = false
+          WHERE id = $2
+        `, [now, id]);
+
+        await client.query('COMMIT');
+
+        // Emit socket event to refresh all connected clients
+        io.to(`event-${id}`).emit('auction_reset', { eventId: id });
+
+        res.json({ success: true, message: "Auction reset successfully" });
+      } catch (err) {
+        await client.query('ROLLBACK');
+        throw err;
+      } finally {
+        client.release();
+      }
+    } catch (err) {
+      console.error("Error resetting auction:", err);
+      res.status(500).json({ error: "Failed to reset auction" });
     }
   });
 

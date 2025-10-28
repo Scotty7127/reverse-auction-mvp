@@ -168,41 +168,55 @@ function getRandomColor(seed) {
 
 // --- Graph Types ---
 
-// Helper: Aggregate total extended bid over time for a bidder
+// Helper: Aggregate total price over time for a bidder
 function aggregateTotalPriceSeries(bids) {
-  // bids: array of { time, extendedBid, line_item_id, rawBid }
+  // bids: array of { time, extendedBid, savings, line_item_id, rawBid }
   if (!Array.isArray(bids) || bids.length === 0) return [];
   const sorted = bids.slice().sort((a, b) => a.time - b.time);
-  const currentByLine = new Map();
+  const currentPriceByLine = new Map();
   const series = [];
+  
+  // Group bids by time to handle multiple line items bid at the same time
+  const bidsByTime = new Map();
   for (const b of sorted) {
     if (!b) continue;
     const t = typeof b.time === 'number' ? b.time : 0;
-    if (b.line_item_id != null) currentByLine.set(b.line_item_id, Number(b.extendedBid) || 0);
-    let total = 0;
-    currentByLine.forEach(v => { if (Number.isFinite(v)) total += v; });
-    if (series.length && series[series.length - 1].x === t) {
-      series[series.length - 1].y = total;
-      // Keep the most recent bid info for this time point
-      series[series.length - 1].isOpening = b.rawBid?.id?.toString().startsWith('opening-');
-    } else {
-      series.push({ 
-        x: t, 
-        y: total,
-        isOpening: b.rawBid?.id?.toString().startsWith('opening-')
-      });
+    if (!bidsByTime.has(t)) {
+      bidsByTime.set(t, []);
     }
+    bidsByTime.get(t).push(b);
   }
+  
+  // Process each time point
+  for (const [t, bidsAtTime] of Array.from(bidsByTime.entries()).sort((a, b) => a[0] - b[0])) {
+    // Update price for all line items bid at this time
+    for (const b of bidsAtTime) {
+      if (b.line_item_id != null) {
+        currentPriceByLine.set(b.line_item_id, Number(b.extendedBid) || 0);
+      }
+    }
+    
+    // Calculate total price across all line items
+    let totalPrice = 0;
+    currentPriceByLine.forEach(v => { if (Number.isFinite(v)) totalPrice += v; });
+    
+    // Add one point per time (even if multiple line items were bid)
+    series.push({ 
+      x: t, 
+      y: totalPrice,
+      isOpening: bidsAtTime.some(b => b.rawBid?.id?.toString().startsWith('opening-'))
+    });
+  }
+  
   return series;
 }
 
 // 1️⃣ Savings by Bidder (default)
 function showSavingsByBidder(biddersMap, currencySymbol = '£', baselineValue = null, reserveValue = null) {
   if (!chart) initChart('bid-chart');
-  // Each Y value is the actual event total extended price for the bidder (not shifted)
+  // Each Y value is the total price across all line items for the bidder
   const datasets = Array.from(biddersMap.values()).map(bidder => {
-    const pointsRaw = aggregateTotalPriceSeries(bidder.bids || []);
-    const points = pointsRaw; // keep actual totals, no shift
+    const points = aggregateTotalPriceSeries(bidder.bids || []);
     return {
       label: bidder.user_name,
       data: points,
@@ -216,43 +230,38 @@ function showSavingsByBidder(biddersMap, currencySymbol = '£', baselineValue = 
 
   updateChart(datasets);
 
-  // Update baseline annotation if it exists
+  // Update baseline annotation
   if (chart.options.plugins?.annotation?.annotations) {
     if (baselineValue !== null) {
       currentBaselineValue = baselineValue;
       
-      // Create or update baseline annotation
       chart.options.plugins.annotation.annotations.baselineLine = {
         type: 'line',
         yMin: baselineValue,
         yMax: baselineValue,
         xMin: 0,
         xMax: (context) => {
-          // Dynamically extend to the current x-axis max
           return context.chart.scales.x.max;
         },
         borderColor: 'rgba(34, 197, 94, 0.5)',
         borderWidth: 3,
         borderDash: []
       };
-      console.log('Updated baseline annotation to y =', baselineValue);
-    } else if (chart.options.plugins.annotation.annotations.baselineLine) {
-      delete chart.options.plugins.annotation.annotations.baselineLine;
     }
   }
 
-  // ticks show actual prices
+  // ticks show prices
   chart.options.scales.y.ticks.callback = v =>
     `${currencySymbol}${v.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
   
-  // Tooltip callbacks - same format as main chart
+  // Tooltip callbacks
   chart.options.plugins.tooltip.callbacks.title = ctx => {
     if (!ctx || ctx.length === 0) return '';
     const point = ctx[0];
     const d = point.raw;
     if (!d) return '';
     const price = d.y;
-    return `${currencySymbol}${price.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+    return `Total: ${currencySymbol}${price.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
   };
   
   chart.options.plugins.tooltip.callbacks.label = ctx => {
@@ -261,7 +270,6 @@ function showSavingsByBidder(biddersMap, currencySymbol = '£', baselineValue = 
     const name = ctx.dataset.label || 'Bidder';
     const time = d.x ? `${d.x.toFixed(1)}m` : '';
     
-    // Check if this is an opening bid
     if (name.toLowerCase().includes('opening') || d.isOpening) {
       return `${name} - Opening Bid`;
     }
@@ -269,7 +277,6 @@ function showSavingsByBidder(biddersMap, currencySymbol = '£', baselineValue = 
     return `${name} @ ${time}`;
   };
 
-  // Update the chart to apply all changes
   chart.update('none');
 }
 

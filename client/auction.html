@@ -70,6 +70,7 @@
       <div class="stat-item">
         <span class="stat-label">Extensions</span>
         <span class="stat-value" id="extensions-value">0</span>
+        <span class="stat-subtitle" id="extension-settings" style="font-size: 11px; color: #6b7280; margin-top: 4px;">Loading...</span>
       </div>
     </div>
 
@@ -191,6 +192,7 @@
     let auctionLive = false;
     let auctionPaused = false;
     let pausedTimeRemaining = null; // Store time remaining when paused
+    let extensionCount = 0; // Track number of extensions triggered
     let countdownInterval = null;
     // Chart.js chart handled by AuctionGraphs module
 
@@ -245,7 +247,14 @@
           auctionLive = true;
           pauseResumeBtn.disabled = false;
           setPauseButtonState(false);
-          auctionEnd = new Date(auctionStart.getTime() + auctionDurationMs);
+          
+          // Initialize auction end time if not already set
+          if (!auctionEnd) {
+            auctionEnd = new Date(auctionStart.getTime() + auctionDurationMs);
+            // Update the server with the calculated end time
+            initializeAuctionEndTime();
+          }
+          
           timeSubEl.textContent = '';
           // Start the x-axis expansion now that auction is live, passing actual start time
           AuctionGraphs.startXAxisExpansion(auctionStart);
@@ -274,6 +283,21 @@
         }
         timeMainEl.textContent = `Time left: ${formatHMS(msLeft)}`;
         timeSubEl.textContent = '';
+      }
+    }
+
+    // --- Initialize auction end time on server when auction goes live ---
+    async function initializeAuctionEndTime() {
+      try {
+        await authFetch(`/events/${eventId}/initialize-end-time`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            auction_end_time: auctionEnd.toISOString()
+          })
+        });
+      } catch(e) {
+        console.error('Error initializing auction end time:', e);
       }
     }
 
@@ -306,11 +330,27 @@
       if(eventData.auction_time){
         auctionStart = new Date(eventData.auction_time);
       }
-      auctionDurationMs = (Number(eventData.auction_duration) || 60) * 60 * 1000;
+      
+      // Use auction_end_time if available, otherwise calculate from duration
+      if (eventData.auction_end_time) {
+        auctionEnd = new Date(eventData.auction_end_time);
+        auctionDurationMs = auctionEnd - auctionStart;
+      } else {
+        auctionDurationMs = (Number(eventData.auction_duration) || 60) * 60 * 1000;
+      }
+      
       auctionLive = false;
       auctionPaused = true;
       pauseResumeBtn.disabled = true;
       setPauseButtonState(false);
+
+      // Display extension settings
+      const extensionTime = Number(eventData.extension_time) || 0;
+      const extensionThreshold = Number(eventData.extension_threshold) || 0;
+      const extensionSettingsEl = document.getElementById('extension-settings');
+      if (extensionSettingsEl) {
+        extensionSettingsEl.textContent = `Reset to ${extensionTime}s if bid in last ${extensionThreshold}s`;
+      }
 
       // Load baseline data for line items (if available)
       baselineMap.clear();
@@ -356,7 +396,7 @@
         const s = await res.json();
         document.getElementById('total-bids-value').textContent = s.total_bids || 0;
         document.getElementById('bidders-connected-value').textContent = `${s.bidders_connected || 0} / ${s.total_bidders || 0}`;
-        document.getElementById('extensions-value').textContent = s.extensions || 0;
+        document.getElementById('extensions-value').textContent = extensionCount;
       } catch(e) {
         console.error('Stats error', e);
       }
@@ -484,7 +524,7 @@
         tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">No bids yet</td></tr>';
         return;
       }
-      allBids.sort((a,b)=>new Date(a.created_at)-new Date(b.created_at));
+      allBids.sort((a,b)=>new Date(b.created_at)-new Date(a.created_at));
       tbody.innerHTML = allBids.map(b=>{
         const li = baselineMap.get(b.line_item_id);
         const lineNum = li?.item_number || b.line_item_id || '-';
@@ -660,6 +700,27 @@
         updateChartAndTable();
       });
 
+      socket.on('auction_extended', (data) => {
+        console.log('Auction extended!', data);
+        // Update the auction end time
+        if (data.newEndTime) {
+          auctionEnd = new Date(data.newEndTime);
+          extensionCount++;
+          document.getElementById('extensions-value').textContent = extensionCount;
+          
+          // Show a visual notification
+          timeSubEl.textContent = `⏱️ Extended by ${data.extensionTime}s`;
+          setTimeout(() => {
+            if (!auctionPaused) timeSubEl.textContent = '';
+          }, 3000);
+        }
+      });
+
+      socket.on('auction_reset', (data) => {
+        console.log('Auction reset! Reloading page...');
+        window.location.reload();
+      });
+
       socket.on('connect_error', (err) => {
         console.error('Socket connect_error:', err?.message || err);
       });
@@ -735,28 +796,25 @@
       const debugStartNowBtn = document.getElementById('debug-start-now-btn');
       if (debugStartNowBtn) {
         debugStartNowBtn.addEventListener('click', async () => {
-          if (!confirm('DEBUG: Start this auction immediately?')) return;
+          if (!confirm('DEBUG: Reset auction and start now? This will delete all bids and reset the graph.')) return;
           
           try {
-            const now = new Date();
-            const res = await authFetch(`/events/${eventId}`, {
-              method: 'PUT',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                ...eventData,
-                auction_time: now.toISOString()
-              })
+            const res = await authFetch(`/events/${eventId}/debug-reset`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' }
             });
             
             if (res.ok) {
-              console.log('Auction start time set to NOW! Refreshing...');
+              console.log('Auction reset! Starting now. Refreshing...');
               window.location.reload();
             } else {
               const error = await res.json();
-              console.error('Failed to start auction:', error.error || 'Unknown error');
+              console.error('Failed to reset auction:', error.error || 'Unknown error');
+              alert('Failed to reset auction: ' + (error.error || 'Unknown error'));
             }
           } catch (e) {
-            console.error('Error starting auction:', e);
+            console.error('Error resetting auction:', e);
+            alert('Error resetting auction: ' + e.message);
           }
         });
       }
