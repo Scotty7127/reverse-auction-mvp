@@ -183,6 +183,16 @@ body {
   background: #f8fafc;
 }
 
+.auction-table tbody tr.selected {
+  background: #dbeafe;
+  border-left: 3px solid #3b82f6;
+}
+
+.auction-table tbody tr.opening-bid {
+  opacity: 0.6;
+  font-style: italic;
+}
+
 .auction-table tbody td {
   padding: 10px 12px;
   color: #1e293b;

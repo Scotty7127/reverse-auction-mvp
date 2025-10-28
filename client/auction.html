@@ -52,7 +52,8 @@
         <div id="time-sub" class="timer-subtitle"></div>
       </div>
       <div class="auction-controls-section">
-        <button id="pause-resume-btn" class="btn-control" disabled>Pause Auction</button>
+        <button id="pause-resume-btn" class="btn-control" disabled style="min-width: 100px; font-weight: 600;">PAUSE</button>
+        <button id="debug-start-now-btn" class="btn-control" style="margin-left: 8px; background: #f59e0b; border-color: #f59e0b;">🚀 DEBUG: Start Now</button>
       </div>
     </div>
 
@@ -102,7 +103,13 @@
 
       <!-- Bid Stream -->
       <div class="table-section">
-        <h2>Bid Stream</h2>
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+          <h2 style="margin: 0;">Bid Stream</h2>
+          <div>
+            <button id="edit-bid-btn" class="btn btn-sm btn-outline-primary" style="margin-right: 8px;" disabled>Edit Selected</button>
+            <button id="delete-bid-btn" class="btn btn-sm btn-outline-danger" disabled>Delete Selected</button>
+          </div>
+        </div>
         <div class="table-scroll">
           <table class="auction-table">
             <thead>
@@ -112,10 +119,11 @@
                 <th>Bidder</th>
                 <th>Line Item #</th>
                 <th>Line Item Name</th>
+                <th>Bid Amount</th>
               </tr>
             </thead>
             <tbody id="bid-stream-body">
-              <tr><td colspan="5" class="empty-state">No bids yet</td></tr>
+              <tr><td colspan="6" class="empty-state">No bids yet</td></tr>
             </tbody>
           </table>
         </div>
@@ -182,6 +190,7 @@
     let auctionEnd = null;
     let auctionLive = false;
     let auctionPaused = false;
+    let pausedTimeRemaining = null; // Store time remaining when paused
     let countdownInterval = null;
     // Chart.js chart handled by AuctionGraphs module
 
@@ -203,9 +212,25 @@
     // Track last total baseline for chart reinit
     let lastTotalBaseline = null;
 
+    // --- Helper function to update pause/resume button ---
+    function setPauseButtonState(isPaused) {
+      if (isPaused) {
+        pauseResumeBtn.textContent = 'RESUME';
+        pauseResumeBtn.style.background = '#22c55e';
+        pauseResumeBtn.style.borderColor = '#22c55e';
+        pauseResumeBtn.style.color = '#ffffff';
+      } else {
+        pauseResumeBtn.textContent = 'PAUSE';
+        pauseResumeBtn.style.background = '#ef4444';
+        pauseResumeBtn.style.borderColor = '#ef4444';
+        pauseResumeBtn.style.color = '#ffffff';
+      }
+    }
+
     // --- Auction time management ---
     function updateCountdown(){
       if(!auctionStart) return;
+      
       const now = new Date();
       if(!auctionLive){
         const msUntilStart = auctionStart - now;
@@ -213,18 +238,27 @@
           timeMainEl.textContent = formatStartsIn(msUntilStart);
           timeSubEl.textContent = `Starts at ${auctionStart.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}`;
           pauseResumeBtn.disabled = true;
-          pauseResumeBtn.textContent = 'Pause Auction';
+          setPauseButtonState(false);
           auctionPaused = false;
         } else {
           // Auction just started
           auctionLive = true;
           pauseResumeBtn.disabled = false;
-          pauseResumeBtn.textContent = 'Pause Auction';
+          setPauseButtonState(false);
           auctionEnd = new Date(auctionStart.getTime() + auctionDurationMs);
           timeSubEl.textContent = '';
+          // Start the x-axis expansion now that auction is live
+          AuctionGraphs.startXAxisExpansion();
         }
       }
       if(auctionLive){
+        // If paused, display the frozen time
+        if(auctionPaused && pausedTimeRemaining !== null){
+          timeMainEl.textContent = `⏸️ ${formatHMS(pausedTimeRemaining)}`;
+          timeSubEl.textContent = 'Paused';
+          return;
+        }
+        
         const msLeft = auctionEnd - now;
         if(msLeft <= 0){
           timeMainEl.textContent = 'Auction ended';
@@ -232,11 +266,14 @@
           pauseResumeBtn.disabled = true;
           auctionLive = false;
           auctionPaused = true;
-          pauseResumeBtn.textContent = 'Pause Auction';
+          setPauseButtonState(false);
           clearInterval(countdownInterval);
+          // Stop x-axis expansion when auction ends
+          AuctionGraphs.stopXAxisExpansion();
           return;
         }
         timeMainEl.textContent = `Time left: ${formatHMS(msLeft)}`;
+        timeSubEl.textContent = '';
       }
     }
 
@@ -273,7 +310,7 @@
       auctionLive = false;
       auctionPaused = true;
       pauseResumeBtn.disabled = true;
-      pauseResumeBtn.textContent = 'Pause Auction';
+      setPauseButtonState(false);
 
       // Load baseline data for line items (if available)
       baselineMap.clear();
@@ -330,6 +367,8 @@
       try {
         const res = await authFetch(`/events/${eventId}/bids`);
         const bids = await res.json();
+        console.log('Loaded bids:', bids);
+        console.log('Sample bid structure:', bids[0]);
         allBids = (bids || []);
         // Prepend opening bids if they exist and aren't already present
         const existingIds = new Set(allBids.map(b => String(b.id)));
@@ -356,6 +395,8 @@
         if(!auctionStart) continue;
         const bidderId = bid.user_id;
         const bidderName = bid.user_name || `Bidder ${bidderId}`;
+        
+        console.log(`Processing bid ${bid.id}: user_id=${bidderId}, user_name="${bid.user_name}", organisation_name="${bid.organisation_name}"`);
 
         // Calculate time elapsed in minutes from auctionStart
         const createdAt = new Date(bid.created_at);
@@ -433,11 +474,13 @@
     }
 
     // --- Bid Stream Table update ---
+    let selectedBidId = null;
+    
     function updateBidStream() {
       const tbody = document.getElementById('bid-stream-body');
       if(!tbody) return;
       if(allBids.length === 0){
-        tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">No bids yet</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">No bids yet</td></tr>';
         return;
       }
       allBids.sort((a,b)=>new Date(a.created_at)-new Date(b.created_at));
@@ -446,14 +489,111 @@
         const lineNum = li?.item_number || b.line_item_id || '-';
         const lineName = li?.item_name || '-';
         const timeInAuction = auctionStart ? ((new Date(b.created_at) - auctionStart)/60000).toFixed(1) + 'm' : '-';
-        return `<tr>
+        const bidAmount = fmtMoney(b.amount || 0, currencySymbol);
+        const isOpeningBid = String(b.id).startsWith('opening-');
+        return `<tr class="bid-row ${isOpeningBid ? 'opening-bid' : 'selectable-bid'}" data-bid-id="${b.id}" data-bid-amount="${b.amount}" data-is-opening="${isOpeningBid}">
           <td>${b.id}</td>
           <td>${timeInAuction}</td>
           <td>${b.user_name || 'Unknown'}</td>
           <td>${lineNum}</td>
           <td>${lineName}</td>
+          <td>${bidAmount}</td>
         </tr>`;
       }).join('');
+      
+      // Add click handlers to rows
+      const selectableRows = tbody.querySelectorAll('.selectable-bid');
+      console.log(`Found ${selectableRows.length} selectable bid rows`);
+      selectableRows.forEach(row => {
+        row.style.cursor = 'pointer';
+        row.addEventListener('click', () => {
+          console.log('Row clicked:', row.dataset.bidId);
+          selectBidRow(row);
+        });
+      });
+    }
+    
+    function selectBidRow(row) {
+      console.log('selectBidRow called for:', row.dataset.bidId);
+      // Remove previous selection
+      document.querySelectorAll('.bid-row.selected').forEach(r => r.classList.remove('selected'));
+      
+      // Select this row
+      row.classList.add('selected');
+      selectedBidId = row.dataset.bidId;
+      
+      // Enable buttons
+      document.getElementById('edit-bid-btn').disabled = false;
+      document.getElementById('delete-bid-btn').disabled = false;
+    }
+    
+    // --- Edit Selected Bid ---
+    async function editSelectedBid() {
+      console.log('editSelectedBid called, selectedBidId:', selectedBidId);
+      if (!selectedBidId) return;
+      
+      const row = document.querySelector(`.bid-row[data-bid-id="${selectedBidId}"]`);
+      if (!row) return;
+      
+      const currentAmount = row.dataset.bidAmount;
+      const newAmount = prompt(`Edit bid amount (current: ${currencySymbol}${currentAmount}):`, currentAmount);
+      if (newAmount === null || newAmount === '') return;
+      
+      const amount = parseFloat(newAmount);
+      if (isNaN(amount) || amount <= 0) {
+        console.error('Invalid bid amount entered');
+        return;
+      }
+
+      try {
+        const res = await authFetch(`/events/${eventId}/bids/${selectedBidId}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ amount })
+        });
+
+        if (res.ok) {
+          console.log('Bid updated successfully');
+          selectedBidId = null;
+          document.getElementById('edit-bid-btn').disabled = true;
+          document.getElementById('delete-bid-btn').disabled = true;
+          await loadBids();
+          loadStats();
+        } else {
+          const error = await res.json();
+          console.error('Failed to update bid:', error.error || 'Unknown error');
+        }
+      } catch (e) {
+        console.error('Error updating bid:', e);
+      }
+    }
+
+    // --- Delete Selected Bid ---
+    async function deleteSelectedBid() {
+      console.log('deleteSelectedBid called, selectedBidId:', selectedBidId);
+      if (!selectedBidId) return;
+      
+      if (!confirm('Are you sure you want to delete this bid?')) return;
+
+      try {
+        const res = await authFetch(`/events/${eventId}/bids/${selectedBidId}`, {
+          method: 'DELETE'
+        });
+
+        if (res.ok) {
+          console.log('Bid deleted successfully');
+          selectedBidId = null;
+          document.getElementById('edit-bid-btn').disabled = true;
+          document.getElementById('delete-bid-btn').disabled = true;
+          await loadBids();
+          loadStats();
+        } else {
+          const error = await res.json();
+          console.error('Failed to delete bid:', error.error || 'Unknown error');
+        }
+      } catch (e) {
+        console.error('Error deleting bid:', e);
+      }
     }
 
     // --- Socket.IO integration ---
@@ -475,19 +615,47 @@
         loadStats();
       });
 
+      socket.on('bid_updated', async (data) => {
+        console.log('Bid updated:', data);
+        // Reload all bids and stats to reflect the change
+        await loadBids();
+        loadStats();
+      });
+
+      socket.on('bid_deleted', async (data) => {
+        console.log('Bid deleted:', data);
+        // Clear selection if the deleted bid was selected
+        if (selectedBidId === String(data.bidId)) {
+          selectedBidId = null;
+          document.getElementById('edit-bid-btn').disabled = true;
+          document.getElementById('delete-bid-btn').disabled = true;
+        }
+        // Reload all bids and stats to reflect the change
+        await loadBids();
+        loadStats();
+      });
+
       socket.on('bidders_count_update', loadStats);
 
       socket.on('auction_paused', () => {
+        // Store the time remaining when paused
+        if(auctionEnd){
+          pausedTimeRemaining = auctionEnd - new Date();
+        }
         auctionPaused = true;
-        pauseResumeBtn.textContent = 'Resume Auction';
-        timeMainEl.textContent = 'Auction paused';
-        alert('⏸️ Auction paused.');
+        setPauseButtonState(true);
+        AuctionGraphs.stopXAxisExpansion();
       });
 
       socket.on('auction_resumed', () => {
+        // Recalculate auction end time based on stored remaining time
+        if(pausedTimeRemaining !== null){
+          auctionEnd = new Date(new Date().getTime() + pausedTimeRemaining);
+          pausedTimeRemaining = null;
+        }
         auctionPaused = false;
-        pauseResumeBtn.textContent = 'Pause Auction';
-        alert('▶️ Auction resumed.');
+        setPauseButtonState(false);
+        AuctionGraphs.startXAxisExpansion();
         updateChartAndTable();
       });
 
@@ -500,16 +668,24 @@
     async function togglePauseResume(){
       if(!auctionLive) return;
       try {
-        const isPause = pauseResumeBtn.textContent.toLowerCase().includes('pause');
+        const isPause = !auctionPaused; // If currently not paused, we're pausing
         const res = await authFetch(`/events/${eventId}/${isPause ? 'pause' : 'resume'}`, { method:'PATCH' });
         if(res.ok){
           if(isPause){
             auctionPaused = true;
-            pauseResumeBtn.textContent = 'Resume Auction';
-            timeMainEl.textContent = 'Auction paused';
+            setPauseButtonState(true);
+            // Store time remaining when pausing
+            if(auctionEnd){
+              pausedTimeRemaining = auctionEnd - new Date();
+            }
           } else {
+            // Recalculate end time when resuming
+            if(pausedTimeRemaining !== null){
+              auctionEnd = new Date(new Date().getTime() + pausedTimeRemaining);
+              pausedTimeRemaining = null;
+            }
             auctionPaused = false;
-            pauseResumeBtn.textContent = 'Pause Auction';
+            setPauseButtonState(false);
             updateChartAndTable();
           }
         }
@@ -553,6 +729,48 @@
       });
 
       pauseResumeBtn.addEventListener('click', togglePauseResume);
+      
+      // DEBUG: Start auction now button
+      const debugStartNowBtn = document.getElementById('debug-start-now-btn');
+      if (debugStartNowBtn) {
+        debugStartNowBtn.addEventListener('click', async () => {
+          if (!confirm('DEBUG: Start this auction immediately?')) return;
+          
+          try {
+            const now = new Date();
+            const res = await authFetch(`/events/${eventId}`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                ...eventData,
+                auction_time: now.toISOString()
+              })
+            });
+            
+            if (res.ok) {
+              console.log('Auction start time set to NOW! Refreshing...');
+              window.location.reload();
+            } else {
+              const error = await res.json();
+              console.error('Failed to start auction:', error.error || 'Unknown error');
+            }
+          } catch (e) {
+            console.error('Error starting auction:', e);
+          }
+        });
+      }
+      
+      // Attach Edit/Delete button handlers
+      const editBtn = document.getElementById('edit-bid-btn');
+      const deleteBtn = document.getElementById('delete-bid-btn');
+      
+      if (editBtn && deleteBtn) {
+        console.log('Edit/Delete buttons found and attaching listeners');
+        editBtn.addEventListener('click', editSelectedBid);
+        deleteBtn.addEventListener('click', deleteSelectedBid);
+      } else {
+        console.error('Edit/Delete buttons not found!');
+      }
 
       await loadEvent();
       await loadStats();

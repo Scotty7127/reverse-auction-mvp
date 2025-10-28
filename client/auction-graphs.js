@@ -71,7 +71,7 @@ function initChart(canvasId, baselineValue = null, currencySymbol = '£') {
           title: { display: true, text: 'Time (minutes)' },
           ticks: { callback: v => `${v}m` },
           min: 0,
-          max: 10
+          max: 0.5
         },
         y: {
           beginAtZero: false,
@@ -123,17 +123,7 @@ function initChart(canvasId, baselineValue = null, currencySymbol = '£') {
     chart.update('none');
   }
 
-  // Start interval to expand x-axis max by 1.5 every 1.5 minutes (90000 ms)
-  if (!xScaleInterval) {
-    xScaleInterval = setInterval(() => {
-      if (chart && chart.options && chart.options.scales && chart.options.scales.x) {
-        if (typeof chart.options.scales.x.max === 'number') {
-          chart.options.scales.x.max += 1.5;
-          chart.update('none');
-        }
-      }
-    }, 90000);
-  }
+  // Don't start the x-axis expansion here - wait for startXAxisExpansion() to be called
 }
 
 function updateChart(datasets) {
@@ -291,10 +281,37 @@ function clearChart() {
   currentBaselineValue = null;
 }
 
+// Start x-axis expansion (call when auction goes live)
+function startXAxisExpansion() {
+  if (xScaleInterval) return; // Already running
+  
+  xScaleInterval = setInterval(() => {
+    if (chart && chart.options && chart.options.scales && chart.options.scales.x) {
+      if (typeof chart.options.scales.x.max === 'number') {
+        chart.options.scales.x.max += 0.5;
+        chart.update('none');
+      }
+    }
+  }, 30000); // Every 30 seconds, add 0.5 minutes
+  
+  console.log('X-axis expansion started');
+}
+
+// Stop x-axis expansion (call when auction ends or pauses)
+function stopXAxisExpansion() {
+  if (xScaleInterval) {
+    clearInterval(xScaleInterval);
+    xScaleInterval = null;
+    console.log('X-axis expansion stopped');
+  }
+}
+
 // Default export (for non-module scripts)
 window.AuctionGraphs = {
   initChart,
   showSavingsByBidder,
   showLineItemChart,
-  clearChart
+  clearChart,
+  startXAxisExpansion,
+  stopXAxisExpansion
 };

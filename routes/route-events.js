@@ -176,6 +176,92 @@ module.exports = (io) => {
     }
   });
 
+  // === Edit a Bid (Manager only) ===
+  router.patch("/events/:eventId/bids/:bidId", ensureAuthenticated, async (req, res) => {
+    try {
+      if (req.user.role !== "manager") {
+        return res.status(403).json({ error: "Only managers can edit bids" });
+      }
+
+      const { eventId, bidId } = req.params;
+      const { amount } = req.body;
+      const userId = req.user.id;
+
+      if (!amount || isNaN(amount) || amount <= 0) {
+        return res.status(400).json({ error: "Invalid bid amount" });
+      }
+
+      // Check if the manager is a team member of this event
+      const isMember = await checkTeamMembership(eventId, userId);
+      if (!isMember) {
+        return res.status(403).json({ error: "You are not a team member of this event" });
+      }
+
+      // Verify bid belongs to this event
+      const bidCheck = await pool.query(
+        `SELECT id FROM bids WHERE id = $1 AND event_id = $2`,
+        [bidId, eventId]
+      );
+
+      if (bidCheck.rows.length === 0) {
+        return res.status(404).json({ error: "Bid not found" });
+      }
+
+      // Update the bid
+      await pool.query(
+        `UPDATE bids SET amount = $1 WHERE id = $2`,
+        [amount, bidId]
+      );
+
+      // Emit socket event
+      io.to(`event_${eventId}`).emit("bid_updated", { bidId, amount });
+
+      res.json({ success: true, bidId, amount });
+    } catch (err) {
+      console.error("Error updating bid:", err);
+      res.status(500).json({ error: "Failed to update bid" });
+    }
+  });
+
+  // === Delete a Bid (Manager only) ===
+  router.delete("/events/:eventId/bids/:bidId", ensureAuthenticated, async (req, res) => {
+    try {
+      if (req.user.role !== "manager") {
+        return res.status(403).json({ error: "Only managers can delete bids" });
+      }
+
+      const { eventId, bidId } = req.params;
+      const userId = req.user.id;
+
+      // Check if the manager is a team member of this event
+      const isMember = await checkTeamMembership(eventId, userId);
+      if (!isMember) {
+        return res.status(403).json({ error: "You are not a team member of this event" });
+      }
+
+      // Verify bid belongs to this event
+      const bidCheck = await pool.query(
+        `SELECT id FROM bids WHERE id = $1 AND event_id = $2`,
+        [bidId, eventId]
+      );
+
+      if (bidCheck.rows.length === 0) {
+        return res.status(404).json({ error: "Bid not found" });
+      }
+
+      // Delete the bid
+      await pool.query(`DELETE FROM bids WHERE id = $1`, [bidId]);
+
+      // Emit socket event
+      io.to(`event_${eventId}`).emit("bid_deleted", { bidId });
+
+      res.json({ success: true, bidId });
+    } catch (err) {
+      console.error("Error deleting bid:", err);
+      res.status(500).json({ error: "Failed to delete bid" });
+    }
+  });
+
   // === Create Event ===
   router.post("/events", ensureAuthenticated, async (req, res) => {
     try {
@@ -446,17 +532,24 @@ module.exports = (io) => {
            s.opening_bid,
            u.first_name,
            u.last_name,
-           u.email
+           u.email,
+           o.name AS organisation_name
          FROM supplier_line_item_settings s
          JOIN users u ON s.supplier_id = u.id
+         LEFT JOIN organisations o ON u.organisation_id = o.id
          WHERE s.event_id = $1
          ORDER BY s.supplier_id, s.line_item_id`,
         [req.params.id]
       );
-      event.supplier_assignments = supplierAssignmentsResult.rows.map(s => ({
-        ...s,
-        supplier_name: `${(s.first_name || '').trim()} ${(s.last_name || '').trim()}`.trim() || s.email || `Supplier ${s.supplier_id}`
-      }));
+      event.supplier_assignments = supplierAssignmentsResult.rows.map(s => {
+        if (!s.organisation_name) {
+          console.error(`ERROR: Supplier assignment for user ${s.supplier_id} (${s.email}) has no organisation_name. This user must be assigned to an organisation.`);
+        }
+        return {
+          ...s,
+          supplier_name: s.organisation_name || `[NO ORG] ${s.email || s.supplier_id}`
+        };
+      });
 
       res.json(event);
     } catch (err) {
@@ -514,9 +607,11 @@ module.exports = (io) => {
           u.first_name, 
           u.last_name, 
           u.email,
+          o.name AS organisation_name,
           COALESCE(s.weighting, 1.0) AS weighting
         FROM bids b
         LEFT JOIN users u ON b.user_id = u.id
+        LEFT JOIN organisations o ON u.organisation_id = o.id
         LEFT JOIN supplier_line_item_settings s ON s.event_id = b.event_id 
           AND s.line_item_id = b.line_item_id 
           AND s.supplier_id = b.user_id
@@ -524,11 +619,16 @@ module.exports = (io) => {
         ORDER BY b.created_at DESC
       `;
       const bidsResult = await pool.query(bidsQuery, [eventId]);
-      let bids = bidsResult.rows.map(b => ({
-        ...b,
-        bidder_id: b.user_id,
-        user_name: `${(b.first_name || '').trim()} ${(b.last_name || '').trim()}`.trim() || b.email || `User ${b.user_id}`
-      }));
+      let bids = bidsResult.rows.map(b => {
+        if (!b.organisation_name) {
+          console.error(`ERROR: Bid from user ${b.user_id} (${b.email}) has no organisation_name. This user must be assigned to an organisation.`);
+        }
+        return {
+          ...b,
+          bidder_id: b.user_id,
+          user_name: b.organisation_name || `[NO ORG] ${b.email || b.user_id}`
+        };
+      });
 
       if (role === "bidder") {
         bids = bids.filter((b) => b.bidder_id === userId);
