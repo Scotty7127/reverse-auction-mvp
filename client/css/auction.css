@@ -347,9 +347,9 @@ body {
 .bid-stream-header {
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  align-items: flex-start;
   margin-bottom: 12px;
-  gap: 12px;
+  gap: 16px;
   flex-wrap: wrap;
 }
 
@@ -357,11 +357,32 @@ body {
   margin: 0;
 }
 
-.bid-stream-controls {
+.bid-stream-title-section {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+  min-width: 200px;
+}
+
+.bid-stream-filter-dropdown,
+.bid-stream-sort-dropdown {
   display: flex;
   align-items: center;
   gap: 8px;
   flex-wrap: wrap;
+  padding: 8px 12px;
+  background: #f8fafc;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  flex: 1;
+  min-width: 300px;
+}
+
+.bid-stream-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .bid-filter-select {

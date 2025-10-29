@@ -118,9 +118,12 @@
       <!-- Bid Stream -->
       <div class="table-section">
         <div class="bid-stream-header">
-          <h2>Bid Stream</h2>
-          <div class="bid-stream-controls">
-            <label for="bid-stream-filter-type">Filter by:</label>
+          <div class="bid-stream-title-section">
+            <h2>Bid Stream</h2>
+            <button id="bid-stream-filter-btn" class="btn btn-sm btn-outline-secondary">Filter by</button>
+            <button id="bid-stream-sort-btn" class="btn btn-sm btn-outline-secondary">Sort by</button>
+          </div>
+          <div class="bid-stream-filter-dropdown" id="bid-stream-filter-dropdown" style="display: none;">
             <select id="bid-stream-filter-type" class="bid-filter-select">
               <option value="all">All Bids</option>
               <option value="bidder">By Bidder</option>
@@ -129,6 +132,18 @@
             <select id="bid-stream-filter-value" class="bid-filter-select" style="display: none;">
               <option value="">Select...</option>
             </select>
+          </div>
+          <div class="bid-stream-sort-dropdown" id="bid-stream-sort-dropdown" style="display: none;">
+            <select id="bid-stream-sort-select" class="bid-filter-select">
+              <option value="time-desc">Time (Newest First)</option>
+              <option value="time-asc">Time (Oldest First)</option>
+              <option value="bidder-asc">Bidder (A-Z)</option>
+              <option value="bidder-desc">Bidder (Z-A)</option>
+              <option value="amount-desc">Amount (High to Low)</option>
+              <option value="amount-asc">Amount (Low to High)</option>
+            </select>
+          </div>
+          <div class="bid-stream-actions">
             <button id="delete-bid-btn" class="btn btn-sm btn-outline-danger" disabled>Delete Selected</button>
           </div>
         </div>
@@ -241,6 +256,9 @@
     
     // Bid stream filter state (independent from chart filter)
     let bidStreamFilter = { type: 'all', value: null }; // { type: 'all' | 'bidder' | 'line_item', value: string | number | null }
+    
+    // Bid stream sort state
+    let bidStreamSort = 'time-desc'; // Default: time descending (newest first)
 
     // --- DOM elements ---
     const auctionTitleEl = document.getElementById('auction-title');
@@ -1027,7 +1045,31 @@
         tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">No bids yet</td></tr>';
         return;
       }
-      displayBids.sort((a,b)=>new Date(b.created_at)-new Date(a.created_at));
+      
+      // Apply sorting
+      switch(bidStreamSort) {
+        case 'time-desc':
+          displayBids.sort((a,b) => new Date(b.created_at) - new Date(a.created_at));
+          break;
+        case 'time-asc':
+          displayBids.sort((a,b) => new Date(a.created_at) - new Date(b.created_at));
+          break;
+        case 'bidder-asc':
+          displayBids.sort((a,b) => (a.user_name || '').localeCompare(b.user_name || ''));
+          break;
+        case 'bidder-desc':
+          displayBids.sort((a,b) => (b.user_name || '').localeCompare(a.user_name || ''));
+          break;
+        case 'amount-desc':
+          displayBids.sort((a,b) => (b.amount || 0) - (a.amount || 0));
+          break;
+        case 'amount-asc':
+          displayBids.sort((a,b) => (a.amount || 0) - (b.amount || 0));
+          break;
+        default:
+          displayBids.sort((a,b) => new Date(b.created_at) - new Date(a.created_at));
+      }
+      
       tbody.innerHTML = displayBids.map(b=>{
         const li = baselineMap.get(b.line_item_id);
         const lineNum = li?.item_number || b.line_item_id || '-';
@@ -1077,10 +1119,52 @@
     
     // --- Setup bid stream filter ---
     function setupBidStreamFilter() {
+      const filterBtn = document.getElementById('bid-stream-filter-btn');
+      const filterDropdown = document.getElementById('bid-stream-filter-dropdown');
       const filterType = document.getElementById('bid-stream-filter-type');
       const filterValue = document.getElementById('bid-stream-filter-value');
       
-      if (!filterType || !filterValue) return;
+      const sortBtn = document.getElementById('bid-stream-sort-btn');
+      const sortDropdown = document.getElementById('bid-stream-sort-dropdown');
+      const sortSelect = document.getElementById('bid-stream-sort-select');
+      
+      if (!filterBtn || !filterDropdown || !filterType || !filterValue) return;
+      
+      // Toggle filter dropdown visibility
+      filterBtn.addEventListener('click', () => {
+        const isVisible = filterDropdown.style.display === 'block';
+        filterDropdown.style.display = isVisible ? 'none' : 'block';
+        // Close sort dropdown when opening filter
+        if (sortDropdown) sortDropdown.style.display = 'none';
+      });
+      
+      // Toggle sort dropdown visibility
+      if (sortBtn && sortDropdown) {
+        sortBtn.addEventListener('click', () => {
+          const isVisible = sortDropdown.style.display === 'block';
+          sortDropdown.style.display = isVisible ? 'none' : 'block';
+          // Close filter dropdown when opening sort
+          filterDropdown.style.display = 'none';
+        });
+      }
+      
+      // Handle sort change
+      if (sortSelect) {
+        sortSelect.addEventListener('change', () => {
+          bidStreamSort = sortSelect.value;
+          updateBidStream();
+        });
+      }
+      
+      // Close dropdowns when clicking outside
+      document.addEventListener('click', (e) => {
+        if (!filterBtn.contains(e.target) && !filterDropdown.contains(e.target)) {
+          filterDropdown.style.display = 'none';
+        }
+        if (sortBtn && sortDropdown && !sortBtn.contains(e.target) && !sortDropdown.contains(e.target)) {
+          sortDropdown.style.display = 'none';
+        }
+      });
       
       // Handle filter type change
       filterType.addEventListener('change', () => {
