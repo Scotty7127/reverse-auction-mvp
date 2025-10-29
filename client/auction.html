@@ -77,7 +77,19 @@
 
     <!-- Chart -->
     <div class="chart-container">
-      <h2>Total Savings</h2>
+      <div class="chart-header">
+        <div id="filter-dropdown" class="chart-filter-dropdown">
+          <div class="filter-selected" id="filter-selected">
+            <span id="filter-selected-text">Total Savings</span>
+            <svg class="filter-arrow" width="12" height="12" viewBox="0 0 12 12">
+              <path fill="currentColor" d="M6 9L1 4h10z"/>
+            </svg>
+          </div>
+          <div class="filter-menu" id="filter-menu" style="display: none;">
+            <div class="filter-option" data-value="all">Total Savings</div>
+          </div>
+        </div>
+      </div>
       <canvas id="bid-chart"></canvas>
     </div>
 
@@ -85,7 +97,7 @@
     <div class="tables-grid">
       <!-- Ranked Bidders -->
       <div class="table-section">
-        <h2>Ranked Bidders</h2>
+        <h2>Ranked Bidders by Total Savings</h2>
         <div class="table-scroll">
           <table class="auction-table">
             <thead>
@@ -107,8 +119,16 @@
       <div class="table-section">
         <div class="bid-stream-header">
           <h2>Bid Stream</h2>
-          <div>
-            <button id="edit-bid-btn" class="btn btn-sm btn-outline-primary" disabled>Edit Selected</button>
+          <div class="bid-stream-controls">
+            <label for="bid-stream-filter-type">Filter by:</label>
+            <select id="bid-stream-filter-type" class="bid-filter-select">
+              <option value="all">All Bids</option>
+              <option value="bidder">By Bidder</option>
+              <option value="line_item">By Line Item</option>
+            </select>
+            <select id="bid-stream-filter-value" class="bid-filter-select" style="display: none;">
+              <option value="">Select...</option>
+            </select>
             <button id="delete-bid-btn" class="btn btn-sm btn-outline-danger" disabled>Delete Selected</button>
           </div>
         </div>
@@ -214,6 +234,13 @@
     let biddersMap = new Map(); // bidderId -> { user_name, bids: [{time, weightedBid, savings}] }
     let bidderTotals = new Map(); // bidderId -> { user_name, points: [{x, y}] } for graph
     let baselineMap = new Map(); // line_item_id -> { ext_baseline, ext_quantity, item_number, item_name }
+    
+    // Filter state
+    let currentFilter = { type: 'all', id: null }; // { type: 'all' | 'lot' | 'line_item', id: number | null }
+    let lotsData = []; // Array of lots with their line items
+    
+    // Bid stream filter state (independent from chart filter)
+    let bidStreamFilter = { type: 'all', value: null }; // { type: 'all' | 'bidder' | 'line_item', value: string | number | null }
 
     // --- DOM elements ---
     const auctionTitleEl = document.getElementById('auction-title');
@@ -363,6 +390,7 @@
 
     // --- Load event and baseline data ---
     async function loadEvent(){
+      console.log('=== loadEvent() starting ===');
       const res = await authFetch(`/events/${eventId}`);
       eventData = await res.json();
       auctionTitleEl.textContent = eventData.title || 'Live Auction';
@@ -370,8 +398,12 @@
       const code = (eventData.currency || 'GBP').toUpperCase();
       currencySymbol = currencySymbols[code] || code || '£';
 
+      console.log('eventData.auction_time:', eventData.auction_time);
       if(eventData.auction_time){
         auctionStart = new Date(eventData.auction_time);
+        console.log('auctionStart set to:', auctionStart);
+      } else {
+        console.warn('⚠️ No auction_time in eventData!');
       }
       
       // Use auction_end_time if available, otherwise calculate from duration
@@ -405,18 +437,20 @@
               ext_baseline: Number(li.ext_baseline) || 0,
               ext_quantity: Number(li.ext_quantity) || 1,
               item_number: li.item_number,
-              item_name: li.item_name
+              item_name: li.item_name,
+              lot_id: li.lot_id
             });
           }
         }
       }
 
+      // Load lots data for filter dropdown
+      await loadLotsAndPopulateFilter();
+
       // Inject opening bids for suppliers before auction begins, if present
       // This allows pre-assigned opening prices to display as first bids
       const supplierAssignments = eventData.supplier_assignments || eventData.assigned_suppliers;
       if (Array.isArray(supplierAssignments)) {
-        const openingTotalsBySupplier = new Map();
-        
         for (const sa of supplierAssignments) {
           if (sa.opening_bid !== undefined && sa.opening_bid !== null) {
             openingBids.push({
@@ -428,38 +462,9 @@
               weighting: Number(sa.weighting) || 1,
               created_at: eventData.auction_time || new Date().toISOString()
             });
-            
-            // Calculate total for this supplier
-            if (!openingTotalsBySupplier.has(sa.supplier_id)) {
-              openingTotalsBySupplier.set(sa.supplier_id, {
-                user_name: sa.supplier_name || `Supplier ${sa.supplier_id}`,
-                total: 0
-              });
-            }
-            
-            const li = baselineMap.get(sa.line_item_id);
-            const extQuantity = li?.ext_quantity || 1;
-            const weighting = Number(sa.weighting) || 1;
-            const extendedBid = Number(sa.opening_bid) * weighting * extQuantity;
-            
-            openingTotalsBySupplier.get(sa.supplier_id).total += extendedBid;
           }
         }
-        
-        // Add opening totals to bidderTotals
-        openingTotalsBySupplier.forEach((data, supplierId) => {
-          bidderTotals.set(supplierId, {
-            user_name: data.user_name,
-            points: [{
-              x: 0, // Opening bids at time 0
-              y: data.total,
-              isOpening: true // Mark as opening bid for tooltip display
-            }]
-          });
-        });
-        
-        processBids();
-        updateChartAndTable();
+        console.log('Loaded', openingBids.length, 'opening bids from supplier assignments');
       }
     }
 
@@ -476,22 +481,274 @@
       }
     }
 
+    // --- Load lots and populate filter dropdown ---
+    async function loadLotsAndPopulateFilter() {
+      try {
+        const res = await authFetch(`/events/${eventId}/lots`);
+        lotsData = await res.json();
+        
+        const menu = document.getElementById('filter-menu');
+        if (!menu) return;
+        
+        // Clear existing menu
+        menu.innerHTML = '<div class="filter-option selected" data-value="all">Total Savings</div>';
+        
+        // Group line items by lot
+        const lineItemsByLot = new Map();
+        baselineMap.forEach((li, lineItemId) => {
+          const lotId = li.lot_id || 'unassigned';
+          if (!lineItemsByLot.has(lotId)) {
+            lineItemsByLot.set(lotId, []);
+          }
+          lineItemsByLot.get(lotId).push({ id: lineItemId, ...li });
+        });
+        
+        // Add lots with their line items
+        if (lotsData.length > 0) {
+          menu.innerHTML += '<div class="filter-divider"></div>';
+          
+          lotsData.forEach(lot => {
+            const lotItems = lineItemsByLot.get(lot.id) || [];
+            
+            // Sort line items by item_number
+            lotItems.sort((a, b) => {
+              const numA = parseInt(a.item_number) || 0;
+              const numB = parseInt(b.item_number) || 0;
+              return numA - numB;
+            });
+            
+            // Add lot parent
+            const lotDiv = document.createElement('div');
+            lotDiv.className = 'filter-lot-parent';
+            lotDiv.dataset.lotId = lot.id;
+            lotDiv.innerHTML = `
+              <span>${lot.title || `Lot ${lot.id}`}</span>
+              <svg class="lot-arrow" viewBox="0 0 10 10">
+                <path fill="currentColor" d="M2 1 L8 5 L2 9 Z"/>
+              </svg>
+            `;
+            menu.appendChild(lotDiv);
+            
+            // Add line items container
+            const childrenDiv = document.createElement('div');
+            childrenDiv.className = 'filter-lot-children';
+            childrenDiv.dataset.lotId = lot.id;
+            
+            // Add lot-level option (view all items in this lot)
+            const lotOption = document.createElement('div');
+            lotOption.className = 'filter-line-item';
+            lotOption.dataset.value = `lot-${lot.id}`;
+            lotOption.innerHTML = `<em>All items in this lot</em>`;
+            childrenDiv.appendChild(lotOption);
+            
+            // Add individual line items
+            lotItems.forEach(li => {
+              const lineDiv = document.createElement('div');
+              lineDiv.className = 'filter-line-item';
+              lineDiv.dataset.value = `line-${li.id}`;
+              const itemLabel = li.item_number ? `#${li.item_number}` : `Item ${li.id}`;
+              const itemName = li.item_name ? ` - ${li.item_name}` : '';
+              lineDiv.textContent = `${itemLabel}${itemName}`;
+              childrenDiv.appendChild(lineDiv);
+            });
+            
+            menu.appendChild(childrenDiv);
+          });
+        }
+        
+        // Setup event handlers
+        setupFilterDropdown();
+        
+      } catch (e) {
+        console.error('Error loading lots:', e);
+      }
+    }
+
+    // --- Apply filter based on current selection ---
+    function getFilteredLineItemIds() {
+      if (currentFilter.type === 'all') {
+        return null; // No filter, include all
+      } else if (currentFilter.type === 'lot') {
+        // Return all line item IDs for this lot
+        const lineItemIds = [];
+        baselineMap.forEach((li, lineItemId) => {
+          if (li.lot_id === currentFilter.id) {
+            lineItemIds.push(lineItemId);
+          }
+        });
+        return lineItemIds;
+      } else if (currentFilter.type === 'line_item') {
+        // Return only this line item ID
+        return [currentFilter.id];
+      }
+      return null;
+    }
+
+    // --- Filter bids based on current filter ---
+    function getFilteredBids() {
+      const filterIds = getFilteredLineItemIds();
+      console.log('getFilteredBids - filterIds:', filterIds);
+      if (!filterIds) {
+        console.log('No filter, returning all', allBids.length, 'bids');
+        return allBids; // No filter
+      }
+      
+      const filtered = allBids.filter(bid => filterIds.includes(bid.line_item_id));
+      console.log('Filtered to', filtered.length, 'bids from line items:', filterIds);
+      return filtered;
+    }
+
+    // --- Filter baseline map based on current filter ---
+    function getFilteredBaselineMap() {
+      const filterIds = getFilteredLineItemIds();
+      console.log('getFilteredBaselineMap - filterIds:', filterIds);
+      if (!filterIds) {
+        console.log('No filter, returning full baseline map with', baselineMap.size, 'items');
+        return baselineMap; // No filter
+      }
+      
+      const filtered = new Map();
+      filterIds.forEach(id => {
+        if (baselineMap.has(id)) {
+          filtered.set(id, baselineMap.get(id));
+        }
+      });
+      console.log('Filtered baseline to', filtered.size, 'items');
+      return filtered;
+    }
+
+    // --- Setup custom dropdown handlers ---
+    function setupFilterDropdown() {
+      const dropdown = document.getElementById('filter-dropdown');
+      const selected = document.getElementById('filter-selected');
+      const menu = document.getElementById('filter-menu');
+      const selectedText = document.getElementById('filter-selected-text');
+      
+      if (!dropdown || !selected || !menu || !selectedText) return;
+      
+      // Toggle dropdown
+      selected.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const isOpen = menu.style.display === 'block';
+        menu.style.display = isOpen ? 'none' : 'block';
+        dropdown.classList.toggle('open', !isOpen);
+      });
+      
+      // Close dropdown when clicking outside
+      document.addEventListener('click', (e) => {
+        if (!dropdown.contains(e.target)) {
+          menu.style.display = 'none';
+          dropdown.classList.remove('open');
+        }
+      });
+      
+      // Handle lot parent clicks (expand/collapse)
+      menu.addEventListener('click', (e) => {
+        const lotParent = e.target.closest('.filter-lot-parent');
+        if (lotParent) {
+          e.stopPropagation();
+          const lotId = lotParent.dataset.lotId;
+          const children = menu.querySelector(`.filter-lot-children[data-lot-id="${lotId}"]`);
+          if (children) {
+            const isExpanded = children.classList.contains('expanded');
+            children.classList.toggle('expanded', !isExpanded);
+            lotParent.classList.toggle('expanded', !isExpanded);
+          }
+        }
+      });
+      
+      // Handle option selection
+      menu.addEventListener('click', (e) => {
+        const option = e.target.closest('.filter-option, .filter-line-item');
+        if (option && option.dataset.value) {
+          e.stopPropagation();
+          
+          // Update selection
+          menu.querySelectorAll('.filter-option, .filter-line-item').forEach(opt => {
+            opt.classList.remove('selected');
+          });
+          option.classList.add('selected');
+          
+          // Update displayed text
+          selectedText.textContent = option.textContent.trim();
+          
+          // Close menu
+          menu.style.display = 'none';
+          dropdown.classList.remove('open');
+          
+          // Trigger filter change
+          onFilterChange(option.dataset.value);
+        }
+      });
+    }
+
+    // --- Handle filter dropdown change ---
+    function onFilterChange(value) {
+      
+      console.log('Filter changed to:', value);
+      
+      if (value === 'all') {
+        currentFilter = { type: 'all', id: null };
+      } else if (value.startsWith('lot-')) {
+        currentFilter = { type: 'lot', id: parseInt(value.replace('lot-', '')) };
+      } else if (value.startsWith('line-')) {
+        currentFilter = { type: 'line_item', id: parseInt(value.replace('line-', '')) };
+      }
+      
+      console.log('Current filter:', currentFilter);
+      
+      // Reprocess and update display with filtered data
+      processBids();
+      rebuildBidderTotalsFromHistory();
+      updateChartAndTable();
+    }
+
     // --- Load bids ---
     async function loadBids(){
       try {
+        console.log('=== loadBids() starting ===');
+        console.log('auctionStart before loading bids:', auctionStart);
+        console.log('openingBids count:', openingBids.length);
+        
         const res = await authFetch(`/events/${eventId}/bids`);
         const bids = await res.json();
-        console.log('Loaded bids:', bids);
+        console.log('Loaded bids from server:', bids.length);
         console.log('Sample bid structure:', bids[0]);
         allBids = (bids || []);
+        
         // Prepend opening bids if they exist and aren't already present
         const existingIds = new Set(allBids.map(b => String(b.id)));
+        let addedOpeningBids = 0;
         openingBids.forEach(ob => {
-          if (!existingIds.has(String(ob.id))) allBids.unshift(ob);
+          if (!existingIds.has(String(ob.id))) {
+            allBids.unshift(ob);
+            addedOpeningBids++;
+          }
         });
+        console.log('Added', addedOpeningBids, 'opening bids to allBids');
+        console.log('Total allBids count:', allBids.length);
+        
+        // FALLBACK: If no auction_time was set, use the earliest bid timestamp as the start time
+        // This ensures opening bids are at x=0 and subsequent bids are relative to that
+        if (!auctionStart && allBids.length > 0) {
+          const earliestBid = allBids.reduce((earliest, bid) => {
+            const bidTime = new Date(bid.created_at);
+            return (!earliest || bidTime < earliest) ? bidTime : earliest;
+          }, null);
+          
+          if (earliestBid) {
+            auctionStart = earliestBid;
+            console.log('⚠️ No auction_time set - using earliest bid as auctionStart:', auctionStart);
+            console.log('   This means opening bids will be at x=0 and all other bids relative to this time');
+          }
+        }
+        
         processBids();
+        console.log('About to call rebuildBidderTotalsFromHistory, auctionStart:', auctionStart);
         rebuildBidderTotalsFromHistory(); // Rebuild totals once from history
+        console.log('After rebuildBidderTotalsFromHistory, bidderTotals.size:', bidderTotals.size);
         updateChartAndTable();
+        console.log('=== loadBids() complete ===');
       } catch(e) {
         console.error('Bids error', e);
       }
@@ -499,18 +756,39 @@
 
     // Rebuild bidderTotals from existing bids (called ONLY on page load)
     function rebuildBidderTotalsFromHistory() {
-      console.log('Rebuilding bidder totals from historical bids...');
+      console.log('Rebuilding bidder totals from historical bids...', 'Filter:', currentFilter);
+      
+      // Safety check - need auction start time to calculate elapsed time
+      if (!auctionStart) {
+        console.warn('⚠️ Cannot rebuild bidder totals - auction start time not set yet');
+        return;
+      }
+      
+      // Always clear and rebuild from scratch
+      bidderTotals.clear();
+      
+      // Get filtered bids and baseline
+      const filteredBids = getFilteredBids();
+      const filteredBaseline = getFilteredBaselineMap();
+      
+      console.log('All bids count:', allBids.length);
+      console.log('Filtered bids count:', filteredBids.length);
+      console.log('Filtered baseline count:', filteredBaseline.size);
+      console.log('Auction start time:', auctionStart);
       
       // Group all bids by user
       const userBids = new Map(); // user_id -> array of all their bids
       
-      for (const bid of allBids) {
+      for (const bid of filteredBids) {
         if (!bid.user_id || !bid.created_at || bid.amount === undefined) continue;
         if (!userBids.has(bid.user_id)) {
           userBids.set(bid.user_id, []);
         }
         userBids.get(bid.user_id).push(bid);
+        console.log(`Added bid ${bid.id} for user ${bid.user_id} (${bid.user_name})`);
       }
+      
+      console.log('Users with bids:', Array.from(userBids.keys()));
       
       // For each user, reconstruct their bid history
       userBids.forEach((bids, userId) => {
@@ -534,63 +812,81 @@
         
         for (const timestamp of sortedTimes) {
           const createdAt = new Date(timestamp);
-          const elapsedMs = createdAt - auctionStart;
+          const elapsedMs = auctionStart ? (createdAt - auctionStart) : 0;
           const elapsedMinutes = elapsedMs / 60000;
           
-          // Skip opening bids (already added)
-          if (elapsedMinutes <= 0) continue;
+          console.log(`Processing timestamp ${createdAt.toISOString()}, elapsed: ${elapsedMinutes} min`);
           
           // Get the state of all line items at this point in time
           // For each line item this user has bid on, find the most recent bid up to this time
           const lineItemState = new Map(); // line_item_id -> latest bid
           
+          // Compare to end of second (timestamp + 999ms) to include all bids in that second
+          const timestampEndOfSecond = timestamp + 999;
+          
+          console.log(`  Checking ${bids.length} bids against timestamp ${timestampEndOfSecond} (end of second)`);
           for (const bid of bids) {
             const bidTime = new Date(bid.created_at).getTime();
-            if (bidTime <= timestamp) {
+            console.log(`    Bid ${bid.id} time: ${bidTime}, comparing to ${timestampEndOfSecond}, bidTime <= timestamp: ${bidTime <= timestampEndOfSecond}`);
+            if (bidTime <= timestampEndOfSecond) {
               // This bid was placed at or before this submission time
               const existing = lineItemState.get(bid.line_item_id);
               if (!existing || new Date(existing.created_at).getTime() < bidTime) {
                 lineItemState.set(bid.line_item_id, bid);
+                console.log(`    ✓ Added/updated line item ${bid.line_item_id} in state`);
               }
             }
           }
           
-          // Calculate total from this state
+          // Calculate total from this state (using filtered baseline)
           let total = 0;
+          let itemsIncluded = 0;
+          console.log(`  Line item state has ${lineItemState.size} items`);
           lineItemState.forEach((bid, lineItemId) => {
-            const li = baselineMap.get(lineItemId);
-            const extQuantity = li?.ext_quantity || 1;
+            console.log(`  Checking line item ${lineItemId}, exists in baseline:`, filteredBaseline.has(lineItemId));
+            const li = filteredBaseline.get(lineItemId);
+            if (!li) {
+              console.log('  ⚠️ Skipping line item not in filter:', lineItemId);
+              return; // Skip if not in filtered baseline
+            }
+            const extQuantity = li.ext_quantity || 1;
             const weighting = Number(bid.weighting) || 1;
             const extendedBid = Number(bid.amount) * weighting * extQuantity;
             total += extendedBid;
+            itemsIncluded++;
+            console.log(`  ✓ Line item ${lineItemId}: ${bid.amount} * ${weighting} * ${extQuantity} = ${extendedBid}`);
           });
           
-          points.push({
-            x: elapsedMinutes,
-            y: total
-          });
+          console.log(`  Total: ${total}, Items included: ${itemsIncluded}`);
+          
+          if (itemsIncluded > 0) {
+            const point = {
+              x: Math.max(0, elapsedMinutes), // Ensure non-negative
+              y: total,
+              isOpening: elapsedMinutes <= 0
+            };
+            points.push(point);
+            console.log(`  Created point:`, point);
+          }
         }
         
-        // Add or update bidder in bidderTotals
+        // Add bidder to bidderTotals if they have points
         if (points.length > 0) {
-          if (bidderTotals.has(userId)) {
-            // Merge with existing opening bid point
-            const existing = bidderTotals.get(userId);
-            existing.points.push(...points);
-          } else {
-            // New bidder
-            bidderTotals.set(userId, {
-              user_name: userName,
-              points: points
-            });
-          }
+          bidderTotals.set(userId, {
+            user_name: userName,
+            points: points
+          });
+          console.log(`✓ Added bidder ${userName} with ${points.length} points`);
+        } else {
+          console.log(`✗ No points for bidder ${userName}`);
         }
       });
       
-      console.log('Bidder totals rebuilt:', Array.from(bidderTotals.entries()).map(([id, data]) => ({
+      console.log('Final bidder totals:', Array.from(bidderTotals.entries()).map(([id, data]) => ({
         userId: id,
         userName: data.user_name,
-        pointCount: data.points.length
+        pointCount: data.points.length,
+        points: data.points
       })));
     }
 
@@ -599,14 +895,18 @@
     function processBids(){
       biddersMap.clear();
 
+      // Get filtered data
+      const filteredBids = getFilteredBids();
+      const filteredBaseline = getFilteredBaselineMap();
+
       // Sort bids by created_at ascending for time series
-      allBids.sort((a,b) => new Date(a.created_at) - new Date(b.created_at));
+      filteredBids.sort((a,b) => new Date(a.created_at) - new Date(b.created_at));
 
       // NOTE: bidderTotals is NOT rebuilt here - it's only populated on initial page load
       // and updated via socket events (bidder_total_update) to avoid recreating multiple
       // points per line item bid
 
-      for(const bid of allBids){
+      for(const bid of filteredBids){
         if(!bid.user_id) continue;
         if(!auctionStart) continue;
         const bidderId = bid.user_id;
@@ -622,11 +922,14 @@
 
         const elapsedMinutes = elapsedMs / 60000;
 
-        // Compute extendedBid: amount * weighting * ext_quantity
+        // Compute extendedBid: amount * weighting * ext_quantity (using filtered baseline)
         const weighting = (typeof bid.weighting === 'number') ? bid.weighting : 1;
-        const extQuantity = baselineMap.get(bid.line_item_id)?.ext_quantity || 1;
+        const extQuantity = filteredBaseline.get(bid.line_item_id)?.ext_quantity || 1;
         const extendedBid = bid.amount * weighting * extQuantity;
-        const savings = computeBidSavings(bid);
+        
+        // Compute savings using filtered baseline
+        const baselineObj = filteredBaseline.get(bid.line_item_id);
+        const savings = baselineObj ? (baselineObj.ext_baseline - extendedBid) : 0;
 
         if(!biddersMap.has(bidderId)){
           biddersMap.set(bidderId, {
@@ -646,8 +949,19 @@
 
     // --- Update Chart and Ranked Table ---
     function updateChartAndTable(){
-      // Compute total baseline for all line items (sum of ext_baseline only)
-      const totalBaseline = Array.from(baselineMap.values()).reduce((acc, li) => acc + (li.ext_baseline || 0), 0);
+      // Get filtered baseline for calculations
+      const filteredBaseline = getFilteredBaselineMap();
+      
+      // Compute total baseline for filtered line items (sum of ext_baseline only)
+      const totalBaseline = Array.from(filteredBaseline.values()).reduce((acc, li) => acc + (li.ext_baseline || 0), 0);
+
+      console.log('updateChartAndTable - totalBaseline:', totalBaseline);
+      console.log('updateChartAndTable - bidderTotals size:', bidderTotals.size);
+      console.log('updateChartAndTable - bidderTotals data:', Array.from(bidderTotals.entries()).map(([id, data]) => ({
+        id, 
+        name: data.user_name, 
+        pointCount: data.points.length
+      })));
 
       // Only reinitialize chart if the baseline has changed
       if (lastTotalBaseline === null || totalBaseline !== lastTotalBaseline) {
@@ -655,6 +969,8 @@
         console.log('Baseline changed, reinitializing chart:', totalBaseline);
         AuctionGraphs.initChart('bid-chart', totalBaseline, currencySymbol);
       }
+      
+      console.log('Calling AuctionGraphs.showSavingsByBidder with', bidderTotals.size, 'bidders');
       AuctionGraphs.showSavingsByBidder(bidderTotals, currencySymbol, totalBaseline, null, eventId);
 
       // Compute rankings
@@ -696,12 +1012,23 @@
     function updateBidStream() {
       const tbody = document.getElementById('bid-stream-body');
       if(!tbody) return;
-      if(allBids.length === 0){
+      
+      // Always use ALL bids for bid stream (not filtered by chart filter)
+      let displayBids = [...allBids];
+      
+      // Apply bid stream specific filter
+      if (bidStreamFilter.type === 'bidder' && bidStreamFilter.value) {
+        displayBids = displayBids.filter(b => b.user_id == bidStreamFilter.value);
+      } else if (bidStreamFilter.type === 'line_item' && bidStreamFilter.value) {
+        displayBids = displayBids.filter(b => b.line_item_id == bidStreamFilter.value);
+      }
+      
+      if(displayBids.length === 0){
         tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">No bids yet</td></tr>';
         return;
       }
-      allBids.sort((a,b)=>new Date(b.created_at)-new Date(a.created_at));
-      tbody.innerHTML = allBids.map(b=>{
+      displayBids.sort((a,b)=>new Date(b.created_at)-new Date(a.created_at));
+      tbody.innerHTML = displayBids.map(b=>{
         const li = baselineMap.get(b.line_item_id);
         const lineNum = li?.item_number || b.line_item_id || '-';
         const lineName = li?.item_name || '-';
@@ -744,9 +1071,116 @@
       row.classList.add('selected');
       selectedBidId = row.dataset.bidId;
       
-      // Enable buttons
-      document.getElementById('edit-bid-btn').disabled = false;
+      // Enable delete button
       document.getElementById('delete-bid-btn').disabled = false;
+    }
+    
+    // --- Setup bid stream filter ---
+    function setupBidStreamFilter() {
+      const filterType = document.getElementById('bid-stream-filter-type');
+      const filterValue = document.getElementById('bid-stream-filter-value');
+      
+      if (!filterType || !filterValue) return;
+      
+      // Handle filter type change
+      filterType.addEventListener('change', () => {
+        const type = filterType.value;
+        
+        if (type === 'all') {
+          filterValue.style.display = 'none';
+          bidStreamFilter = { type: 'all', value: null };
+          updateBidStream();
+        } else if (type === 'bidder') {
+          // Populate bidder dropdown
+          populateBidderFilter();
+          filterValue.style.display = 'inline-block';
+        } else if (type === 'line_item') {
+          // Populate line item dropdown
+          populateLineItemFilter();
+          filterValue.style.display = 'inline-block';
+        }
+      });
+      
+      // Handle filter value change
+      filterValue.addEventListener('change', () => {
+        const type = filterType.value;
+        const value = filterValue.value;
+        
+        if (type === 'bidder') {
+          bidStreamFilter = { type: 'bidder', value: value ? parseInt(value) : null };
+        } else if (type === 'line_item') {
+          bidStreamFilter = { type: 'line_item', value: value ? parseInt(value) : null };
+        }
+        
+        updateBidStream();
+      });
+    }
+    
+    // --- Populate bidder filter options ---
+    function populateBidderFilter() {
+      const filterValue = document.getElementById('bid-stream-filter-value');
+      if (!filterValue) return;
+      
+      // Get unique bidders from all bids
+      const bidders = new Map();
+      allBids.forEach(bid => {
+        if (bid.user_id && bid.user_name) {
+          bidders.set(bid.user_id, bid.user_name);
+        }
+      });
+      
+      // Populate dropdown
+      filterValue.innerHTML = '<option value="">All Bidders</option>';
+      Array.from(bidders.entries())
+        .sort((a, b) => a[1].localeCompare(b[1]))
+        .forEach(([id, name]) => {
+          const option = document.createElement('option');
+          option.value = id;
+          option.textContent = name;
+          filterValue.appendChild(option);
+        });
+      
+      // Reset filter
+      bidStreamFilter = { type: 'bidder', value: null };
+      updateBidStream();
+    }
+    
+    // --- Populate line item filter options ---
+    function populateLineItemFilter() {
+      const filterValue = document.getElementById('bid-stream-filter-value');
+      if (!filterValue) return;
+      
+      // Get unique line items from baseline map
+      const lineItems = [];
+      baselineMap.forEach((li, id) => {
+        lineItems.push({
+          id: id,
+          number: li.item_number,
+          name: li.item_name
+        });
+      });
+      
+      // Sort by item number
+      lineItems.sort((a, b) => {
+        const numA = parseInt(a.number) || 0;
+        const numB = parseInt(b.number) || 0;
+        return numA - numB;
+      });
+      
+      // Populate dropdown
+      filterValue.innerHTML = '<option value="">All Line Items</option>';
+      lineItems.forEach(li => {
+        const option = document.createElement('option');
+        option.value = li.id;
+        const itemLabel = li.number ? `#${li.number}` : `Item ${li.id}`;
+        const itemName = li.name ? ` - ${li.name}` : '';
+        option.textContent = `${itemLabel}${itemName}`;
+        filterValue.appendChild(option);
+      });
+      
+      // Reset filter
+      bidStreamFilter = { type: 'line_item', value: null };
+      updateBidStream();
     }
     
     // --- Edit Selected Bid ---
@@ -777,7 +1211,6 @@
         if (res.ok) {
           console.log('Bid updated successfully');
           selectedBidId = null;
-          document.getElementById('edit-bid-btn').disabled = true;
           document.getElementById('delete-bid-btn').disabled = true;
           await loadBids();
           loadStats();
@@ -805,7 +1238,6 @@
         if (res.ok) {
           console.log('Bid deleted successfully');
           selectedBidId = null;
-          document.getElementById('edit-bid-btn').disabled = true;
           document.getElementById('delete-bid-btn').disabled = true;
           await loadBids();
           loadStats();
@@ -866,25 +1298,34 @@
         // data: { user_id, user_name, total }
         console.log('Bidder total update:', data);
         
-        // Note: Elapsed time for graph x-axis now comes from server via time_sync event
-        // No client-side calculations needed
-        
-        // Get or create bidder entry in bidderTotals
-        if (!bidderTotals.has(data.user_id)) {
-          bidderTotals.set(data.user_id, {
-            user_name: data.user_name,
-            points: []
+        // When filtering, we need to recalculate the totals properly
+        // For now, just refresh the entire dataset when a new bid comes in
+        if (currentFilter.type !== 'all') {
+          // Trigger a full rebuild for filtered views
+          rebuildBidderTotalsFromHistory();
+          updateChartAndTable();
+        } else {
+          // Original behavior for 'all' view
+          // Note: Elapsed time for graph x-axis now comes from server via time_sync event
+          // No client-side calculations needed
+          
+          // Get or create bidder entry in bidderTotals
+          if (!bidderTotals.has(data.user_id)) {
+            bidderTotals.set(data.user_id, {
+              user_name: data.user_name,
+              points: []
+            });
+          }
+          
+          const bidder = bidderTotals.get(data.user_id);
+          bidder.points.push({
+            x: elapsedMinutes,
+            y: data.total
           });
+          
+          // Update chart
+          updateChartAndTable();
         }
-        
-        const bidder = bidderTotals.get(data.user_id);
-        bidder.points.push({
-          x: elapsedMinutes,
-          y: data.total
-        });
-        
-        // Update chart
-        updateChartAndTable();
       });
 
       socket.on('bid_updated', async (data) => {
@@ -899,7 +1340,6 @@
         // Clear selection if the deleted bid was selected
         if (selectedBidId === String(data.bidId)) {
           selectedBidId = null;
-          document.getElementById('edit-bid-btn').disabled = true;
           document.getElementById('delete-bid-btn').disabled = true;
         }
         // Reload all bids and stats to reflect the change
@@ -1028,21 +1468,22 @@
         });
       }
       
-      // Attach Edit/Delete button handlers
-      const editBtn = document.getElementById('edit-bid-btn');
+      // Attach Delete button handler
       const deleteBtn = document.getElementById('delete-bid-btn');
       
-      if (editBtn && deleteBtn) {
-        console.log('Edit/Delete buttons found and attaching listeners');
-        editBtn.addEventListener('click', editSelectedBid);
+      if (deleteBtn) {
+        console.log('Delete button found and attaching listener');
         deleteBtn.addEventListener('click', deleteSelectedBid);
       } else {
-        console.error('Edit/Delete buttons not found!');
+        console.error('Delete button not found!');
       }
 
       await loadEvent();
       await loadStats();
       await loadBids();
+      
+      // Setup bid stream filter after bids are loaded
+      setupBidStreamFilter();
 
       // Display initial countdown before socket connects
       if (auctionEnd) {
