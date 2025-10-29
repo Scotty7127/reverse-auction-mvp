@@ -87,37 +87,6 @@
     let previousBids = {}; // Track previous bid values by line_item_id
     let isPaused = false; // Track if auction is paused
 
-    // === Pre-Auction Countdown (until auction starts) ===
-    function startPreAuctionCountdown(startTime) {
-      clearInterval(preAuctionInterval);
-      
-      function updatePreAuctionDisplay() {
-        const now = new Date();
-        const diff = startTime - now;
-        
-        if (diff <= 0) {
-          // Auction has started
-          clearInterval(preAuctionInterval);
-          auctionHasStarted = true;
-          showAuctionActive();
-          // Start the regular countdown (time left in auction)
-          auctionEndTime = new Date(startTime.getTime() + 60 * 60 * 1000);
-          startCountdown(auctionEndTime);
-          return;
-        }
-        
-        // Calculate time until start
-        const hours = Math.floor(diff / 1000 / 60 / 60);
-        const minutes = Math.floor((diff / 1000 / 60) % 60);
-        const seconds = Math.floor((diff / 1000) % 60);
-        document.getElementById("time-until-auction").textContent =
-          `${String(hours).padStart(2,'0')}:${String(minutes).padStart(2,'0')}:${String(seconds).padStart(2,'0')}`;
-      }
-      
-      updatePreAuctionDisplay();
-      preAuctionInterval = setInterval(updatePreAuctionDisplay, 1000);
-    }
-
     // === Show pre-auction state ===
     function showPreAuctionState() {
       document.getElementById("pre-auction-message").style.display = "block";
@@ -153,35 +122,7 @@
       }
     }
 
-    // === Countdown Timer (time left in auction) ===
-    function startCountdown(endTime) {
-      clearInterval(countdownInterval);
-      
-      function updateCountdown() {
-        if (isPaused) {
-          // Don't update countdown when paused, just return
-          return;
-        }
-        
-        const now = new Date();
-        const diff = endTime - now;
-        if (diff <= 0) {
-          document.getElementById("auction-countdown").textContent = "00:00:00";
-          clearInterval(countdownInterval);
-          return;
-        }
-        const hours = Math.floor(diff / 1000 / 60 / 60);
-        const minutes = Math.floor((diff / 1000 / 60) % 60);
-        const seconds = Math.floor((diff / 1000) % 60);
-        document.getElementById("auction-countdown").textContent =
-          `${String(hours).padStart(2,'0')}:${String(minutes).padStart(2,'0')}:${String(seconds).padStart(2,'0')}`;
-      }
-      
-      updateCountdown();
-      countdownInterval = setInterval(updateCountdown, 1000);
-    }
-
-    // === Update countdown from server time sync ===
+    // === Update countdown from server time sync (AUTHORITATIVE) ===
     function updateCountdownFromServer(secondsRemaining, serverPaused) {
       if (secondsRemaining === null || secondsRemaining === undefined) {
         document.getElementById("auction-countdown").textContent = "Not set";
@@ -227,21 +168,10 @@
         updateSubmitButtonState();
 
         if (auctionStartTime) {
-          const now = new Date();
-          
-          // Check if auction has already started
-          if (now >= auctionStartTime) {
-            auctionHasStarted = true;
-            showAuctionActive();
-            
-            // Note: Countdown is now handled by server time_sync events
-            // No need to start local countdown
-          } else {
-            // Auction hasn't started yet
-            auctionHasStarted = false;
-            showPreAuctionState();
-            startPreAuctionCountdown(auctionStartTime);
-          }
+          // Check if auction has already started (server will send time_sync events)
+          // Note: All timing now handled by server time_sync events
+          auctionHasStarted = true;
+          showAuctionActive();
         }
       } catch (err) {
         console.error("Error loading auction stats:", err);

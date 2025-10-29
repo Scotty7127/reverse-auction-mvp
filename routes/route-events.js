@@ -281,7 +281,7 @@ module.exports = (io) => {
 
       // Get current auction end time to calculate time remaining
       const eventRes = await pool.query(
-        `SELECT auction_end_time FROM events WHERE id = $1`,
+        `SELECT auction_end_time, elapsed_seconds FROM events WHERE id = $1`,
         [eventId]
       );
       const event = eventRes.rows[0];
@@ -292,13 +292,14 @@ module.exports = (io) => {
         const endTime = new Date(event.auction_end_time);
         const secondsRemaining = Math.max(0, Math.floor((endTime - now) / 1000));
         
-        // Store the time remaining in a new column (or we can use existing field)
+        // Store the time remaining AND current elapsed seconds
         await pool.query(
           `UPDATE events 
            SET type = 'paused',
-               paused_time_remaining = $2
+               paused_time_remaining = $2,
+               elapsed_seconds = $3
            WHERE id = $1`,
-          [eventId, secondsRemaining]
+          [eventId, secondsRemaining, event.elapsed_seconds || 0]
         );
       } else {
         // No end time set, just pause
@@ -1151,20 +1152,32 @@ module.exports = (io) => {
         // Delete all bids for this event
         await client.query('DELETE FROM bids WHERE event_id = $1', [id]);
 
-        // Set auction_time to now and clear auction_end_time
+        // Get auction duration to calculate end time
+        const eventRes = await client.query(
+          `SELECT EXTRACT(EPOCH FROM auction_duration)::int AS duration_seconds FROM events WHERE id = $1`,
+          [id]
+        );
+        const durationSeconds = eventRes.rows[0]?.duration_seconds || 1800; // Default 30 minutes
+
+        // Set auction_time to now, calculate auction_end_time, unpause, and clear paused time
         const now = new Date();
+        const endTime = new Date(now.getTime() + (durationSeconds * 1000));
+        
         await client.query(`
           UPDATE events 
           SET auction_time = $1, 
-              auction_end_time = NULL,
-              is_paused = false
-          WHERE id = $2
-        `, [now, id]);
+              auction_end_time = $2,
+              type = 'open',
+              is_paused = false,
+              paused_time_remaining = NULL,
+              elapsed_seconds = 0
+          WHERE id = $3
+        `, [now, endTime, id]);
 
         await client.query('COMMIT');
 
         // Emit socket event to refresh all connected clients
-        io.to(`event-${id}`).emit('auction_reset', { eventId: id });
+        io.to(`event_${id}`).emit('auction_reset', { eventId: id });
 
         res.json({ success: true, message: "Auction reset successfully" });
       } catch (err) {

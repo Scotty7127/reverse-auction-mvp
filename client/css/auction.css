@@ -23,11 +23,44 @@ body {
   margin: -20px -20px 20px -20px;
 }
 
+.auction-title-section {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
 .auction-title-section h1 {
   margin: 0;
   font-size: 1.25rem;
   font-weight: 600;
   color: #1e293b;
+}
+
+.status-badge {
+  display: inline-block;
+  padding: 4px 12px;
+  border-radius: 12px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  transition: all 0.3s ease;
+}
+
+.status-badge.offline {
+  background: #ef4444;
+  color: white;
+}
+
+.status-badge.live {
+  background: #22c55e;
+  color: white;
+  animation: pulse 2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
 }
 
 .auction-timer-section {
@@ -60,6 +93,32 @@ body {
   border-radius: 6px;
   cursor: pointer;
   transition: all 0.15s ease;
+}
+
+#pause-resume-btn {
+  min-width: 100px;
+  font-weight: 600;
+}
+
+/* Pause button state (red) */
+#pause-resume-btn.paused {
+  background: #ef4444;
+  border-color: #ef4444;
+  color: #ffffff;
+}
+
+/* Resume button state (green) */
+#pause-resume-btn.resumed {
+  background: #22c55e;
+  border-color: #22c55e;
+  color: #ffffff;
+}
+
+#debug-start-now-btn {
+  margin-left: 8px;
+  background: #000000;
+  border-color: #21201f;
+  color: #ffffff;
 }
 
 .btn-control:hover:not(:disabled) {
@@ -107,7 +166,7 @@ body {
 
 .stat-subtitle {
   display: block;
-  font-size: 0.6875rem;
+  font-size: 11px;
   color: #6b7280;
   margin-top: 4px;
   font-weight: 400;
@@ -150,6 +209,21 @@ body {
   font-size: 1rem;
   font-weight: 600;
   color: #1e293b;
+}
+
+.bid-stream-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.bid-stream-header h2 {
+  margin: 0;
+}
+
+#edit-bid-btn {
+  margin-right: 8px;
 }
 
 .table-scroll {
@@ -196,6 +270,10 @@ body {
   border-left: 3px solid #3b82f6;
 }
 
+.auction-table tbody tr.selectable-bid {
+  cursor: pointer;
+}
+
 .auction-table tbody tr.opening-bid {
   opacity: 0.6;
   font-style: italic;
@@ -211,6 +289,10 @@ body {
   color: #64748b;
   font-style: italic;
   padding: 24px !important;
+}
+
+.bidder-name {
+  font-weight: 600;
 }
 
 /* === Responsive Design === */

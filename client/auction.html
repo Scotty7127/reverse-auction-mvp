@@ -46,14 +46,15 @@
     <div class="auction-header">
       <div class="auction-title-section">
         <h1 id="auction-title">Live Auction</h1>
+        <span id="auction-status-badge" class="status-badge offline">OFFLINE</span>
       </div>
       <div class="auction-timer-section">
         <div id="time-main" class="timer-display">Loading...</div>
         <div id="time-sub" class="timer-subtitle"></div>
       </div>
       <div class="auction-controls-section">
-        <button id="pause-resume-btn" class="btn-control" disabled style="min-width: 100px; font-weight: 600;">PAUSE</button>
-        <button id="debug-start-now-btn" class="btn-control" style="margin-left: 8px; background: #f59e0b; border-color: #f59e0b;">DEBUG: Start Now</button>
+        <button id="pause-resume-btn" class="btn-control" disabled>PAUSE</button>
+        <button id="debug-start-now-btn" class="btn-control">DEBUG: Start Now/Restart</button>
       </div>
     </div>
 
@@ -70,7 +71,7 @@
       <div class="stat-item">
         <span class="stat-label">Extensions</span>
         <span class="stat-value" id="extensions-value">0</span>
-        <span class="stat-subtitle" id="extension-settings" style="font-size: 11px; color: #6b7280; margin-top: 4px;">Loading...</span>
+        <span class="stat-subtitle" id="extension-settings">Loading...</span>
       </div>
     </div>
 
@@ -104,10 +105,10 @@
 
       <!-- Bid Stream -->
       <div class="table-section">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-          <h2 style="margin: 0;">Bid Stream</h2>
+        <div class="bid-stream-header">
+          <h2>Bid Stream</h2>
           <div>
-            <button id="edit-bid-btn" class="btn btn-sm btn-outline-primary" style="margin-right: 8px;" disabled>Edit Selected</button>
+            <button id="edit-bid-btn" class="btn btn-sm btn-outline-primary" disabled>Edit Selected</button>
             <button id="delete-bid-btn" class="btn btn-sm btn-outline-danger" disabled>Delete Selected</button>
           </div>
         </div>
@@ -204,11 +205,7 @@
     let auctionEnd = null;
     let auctionLive = false;
     let auctionPaused = false;
-    let pausedTimeRemaining = null; // Store time remaining when paused
-    let totalPausedTime = 0; // Track total time spent paused (in ms)
-    let pauseStartTime = null; // Track when current pause started
     let extensionCount = 0; // Track number of extensions triggered
-    let countdownInterval = null;
     // Chart.js chart handled by AuctionGraphs module
 
     // Data stores
@@ -220,6 +217,7 @@
 
     // --- DOM elements ---
     const auctionTitleEl = document.getElementById('auction-title');
+    const auctionStatusBadge = document.getElementById('auction-status-badge');
     const timeMainEl = document.getElementById('time-main');
     const timeSubEl = document.getElementById('time-sub');
     const pauseResumeBtn = document.getElementById('pause-resume-btn');
@@ -230,18 +228,31 @@
     // Track last total baseline for chart reinit
     let lastTotalBaseline = null;
 
+    // --- Helper function to update auction status badge ---
+    function setAuctionStatus(isLive) {
+      if (!auctionStatusBadge) return;
+      
+      if (isLive) {
+        auctionStatusBadge.textContent = 'LIVE';
+        auctionStatusBadge.classList.remove('offline');
+        auctionStatusBadge.classList.add('live');
+      } else {
+        auctionStatusBadge.textContent = 'OFFLINE';
+        auctionStatusBadge.classList.remove('live');
+        auctionStatusBadge.classList.add('offline');
+      }
+    }
+
     // --- Helper function to update pause/resume button ---
     function setPauseButtonState(isPaused) {
       if (isPaused) {
         pauseResumeBtn.textContent = 'RESUME';
-        pauseResumeBtn.style.background = '#22c55e';
-        pauseResumeBtn.style.borderColor = '#22c55e';
-        pauseResumeBtn.style.color = '#ffffff';
+        pauseResumeBtn.classList.remove('paused');
+        pauseResumeBtn.classList.add('resumed');
       } else {
         pauseResumeBtn.textContent = 'PAUSE';
-        pauseResumeBtn.style.background = '#ef4444';
-        pauseResumeBtn.style.borderColor = '#ef4444';
-        pauseResumeBtn.style.color = '#ffffff';
+        pauseResumeBtn.classList.remove('resumed');
+        pauseResumeBtn.classList.add('paused');
       }
     }
 
@@ -256,13 +267,12 @@
           timeMainEl.textContent = formatStartsIn(msUntilStart);
           timeSubEl.textContent = `Starts at ${auctionStart.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}`;
           pauseResumeBtn.disabled = true;
-          setPauseButtonState(false);
-          auctionPaused = false;
+          setPauseButtonState(auctionPaused);
         } else {
           // Auction just started
           auctionLive = true;
           pauseResumeBtn.disabled = false;
-          setPauseButtonState(false);
+          setPauseButtonState(auctionPaused); // Use actual pause state from DB
           
           // Initialize auction end time if not already set
           if (!auctionEnd) {
@@ -272,53 +282,54 @@
           }
           
           timeSubEl.textContent = '';
-          // Start the x-axis expansion now that auction is live, passing actual start time
-          AuctionGraphs.startXAxisExpansion(auctionStart);
         }
       }
       // Note: Live auction countdown is now handled by server time_sync events
       // This function only handles pre-auction countdown
     }
 
-    // --- Update countdown from server time sync (AUTHORITATIVE) ---
+    // === Update countdown display from server ===
     function updateCountdownFromServer(secondsRemaining, isPaused) {
-      if (!auctionLive) return; // Only update if auction is live
-      
-      if (isPaused && pausedTimeRemaining !== null) {
-        timeMainEl.textContent = `⏸️ ${formatHMS(pausedTimeRemaining)}`;
-        timeSubEl.textContent = 'Paused';
-        return;
-      }
+      if (!timeMainEl) return;
       
       if (secondsRemaining === null || secondsRemaining === undefined) {
-        timeMainEl.textContent = 'Time not set';
+        timeMainEl.textContent = 'Waiting for auction to start...';
+        setAuctionStatus(false);
         return;
       }
       
       if (secondsRemaining <= 0) {
-        // Calculate total elapsed time from start to end, excluding paused time
-        const now = new Date();
-        const totalElapsedMs = (now - auctionStart) - totalPausedTime;
-        const totalElapsedFormatted = formatHMS(totalElapsedMs);
-        
         timeMainEl.textContent = 'Auction ended';
-        timeSubEl.textContent = `Total time: ${totalElapsedFormatted}`;
+        timeSubEl.textContent = '';
         pauseResumeBtn.disabled = true;
+        if (auctionLive) {
+          // Auction just ended
+          console.log(`🏁 Auction ended: "${eventData?.title || 'Unknown Event'}"`);
+        }
         auctionLive = false;
         auctionPaused = true;
         setPauseButtonState(false);
-        clearInterval(countdownInterval);
-        // Stop x-axis expansion and freeze at current time when auction ends
-        AuctionGraphs.stopXAxisExpansion(true);
+        setAuctionStatus(false);
         return;
       }
       
+      // Auction is running or paused - enable controls
+      if (!auctionLive) {
+        auctionLive = true;
+        pauseResumeBtn.disabled = false;
+        setAuctionStatus(true);
+        // Console notification when auction goes live
+        console.log(`🚀 Auction is now LIVE: "${eventData?.title || 'Unknown Event'}"`);
+      }
+      
       const msLeft = secondsRemaining * 1000;
-      timeMainEl.textContent = `Time left: ${formatHMS(msLeft)}`;
-      timeSubEl.textContent = '';
-    }
-
-    // --- Initialize auction end time on server when auction goes live ---
+      
+      if (isPaused) {
+        timeMainEl.textContent = `⏸️ Paused: ${formatHMS(msLeft)} remaining`;
+      } else {
+        timeMainEl.textContent = `Time left: ${formatHMS(msLeft)}`;
+      }
+    }    // --- Initialize auction end time on server when auction goes live ---
     async function initializeAuctionEndTime() {
       try {
         await authFetch(`/events/${eventId}/initialize-end-time`, {
@@ -371,10 +382,11 @@
         auctionDurationMs = (Number(eventData.auction_duration) || 60) * 60 * 1000;
       }
       
+      // Set initial pause state from database
+      auctionPaused = eventData.type === 'paused';
       auctionLive = false;
-      auctionPaused = true;
       pauseResumeBtn.disabled = true;
-      setPauseButtonState(false);
+      setPauseButtonState(auctionPaused);
 
       // Display extension settings
       const extensionTime = Number(eventData.extension_time) || 0;
@@ -669,7 +681,7 @@
           const bidderColor = AuctionGraphs.getColorForBidder(r.user_name, eventId);
           return `<tr>
             <td>${i+1}</td>
-            <td><span style="color: ${bidderColor}; font-weight: 600;">${r.user_name}</span></td>
+            <td><span class="bidder-name" style="color: ${bidderColor};">${r.user_name}</span></td>
             <td>${fmtMoney(r.totalSavings, currencySymbol)}</td>
             <td>${r.savingsPercent.toFixed(2)}%</td>
           </tr>`;
@@ -716,7 +728,6 @@
       const selectableRows = tbody.querySelectorAll('.selectable-bid');
       console.log(`Found ${selectableRows.length} selectable bid rows`);
       selectableRows.forEach(row => {
-        row.style.cursor = 'pointer';
         row.addEventListener('click', () => {
           console.log('Row clicked:', row.dataset.bidId);
           selectBidRow(row);
@@ -820,18 +831,13 @@
 
       // SERVER AUTHORITATIVE TIME - Critical for consistency across all users
       socket.on('time_sync', (data) => {
-        const { secondsRemaining, isPaused: serverPaused, endTime } = data;
+        const { secondsRemaining, isPaused: serverPaused, endTime, elapsedSeconds } = data;
         
         // Update pause state from server
+        // Track pause state changes
         if (serverPaused !== auctionPaused) {
           auctionPaused = serverPaused;
           setPauseButtonState(serverPaused);
-          
-          if (serverPaused) {
-            AuctionGraphs.stopXAxisExpansion();
-          } else {
-            AuctionGraphs.startXAxisExpansion(auctionStart);
-          }
         }
         
         // Update end time if provided
@@ -841,6 +847,11 @@
         
         // Update countdown display with server's authoritative time
         updateCountdownFromServer(secondsRemaining, serverPaused);
+        
+        // Update x-axis with server's elapsed time
+        if (elapsedSeconds !== null && elapsedSeconds !== undefined) {
+          AuctionGraphs.updateXAxisFromServer(elapsedSeconds);
+        }
       });
 
       socket.on('bid_update', (bid) => {
@@ -855,10 +866,8 @@
         // data: { user_id, user_name, total }
         console.log('Bidder total update:', data);
         
-        // Calculate elapsed time in minutes
-        const now = new Date();
-        const elapsedMs = (now - auctionStart) - totalPausedTime;
-        const elapsedMinutes = elapsedMs / 60000;
+        // Note: Elapsed time for graph x-axis now comes from server via time_sync event
+        // No client-side calculations needed
         
         // Get or create bidder entry in bidderTotals
         if (!bidderTotals.has(data.user_id)) {
@@ -946,30 +955,10 @@
         const isPause = !auctionPaused; // If currently not paused, we're pausing
         const res = await authFetch(`/events/${eventId}/${isPause ? 'pause' : 'resume'}`, { method:'PATCH' });
         if(res.ok){
-          if(isPause){
-            auctionPaused = true;
-            setPauseButtonState(true);
-            // Track when pause started
-            pauseStartTime = new Date();
-            // Store time remaining when pausing
-            if(auctionEnd){
-              pausedTimeRemaining = auctionEnd - new Date();
-            }
-          } else {
-            // Add paused duration to total
-            if(pauseStartTime !== null){
-              totalPausedTime += (new Date() - pauseStartTime);
-              pauseStartTime = null;
-            }
-            // Recalculate end time when resuming
-            if(pausedTimeRemaining !== null){
-              auctionEnd = new Date(new Date().getTime() + pausedTimeRemaining);
-              pausedTimeRemaining = null;
-            }
-            auctionPaused = false;
-            setPauseButtonState(false);
-            updateChartAndTable();
-          }
+          // Server handles all timing logic
+          // Pause state will be updated via time_sync event
+          auctionPaused = isPause;
+          setPauseButtonState(isPause);
         }
       } catch(e) {
         console.error(e);
@@ -1055,6 +1044,14 @@
       await loadStats();
       await loadBids();
 
+      // Display initial countdown before socket connects
+      if (auctionEnd) {
+        const now = new Date();
+        const msRemaining = auctionEnd - now;
+        const initialSecondsRemaining = Math.max(0, Math.floor(msRemaining / 1000));
+        updateCountdownFromServer(initialSecondsRemaining, auctionPaused);
+      }
+
       // Ensure chart initializes correctly on first page load with proper baseline
       const totalBaseline = Array.from(baselineMap.values()).reduce((acc, li) => acc + (li.ext_baseline || 0), 0);
       lastTotalBaseline = totalBaseline;
@@ -1063,17 +1060,8 @@
       AuctionGraphs.showSavingsByBidder(bidderTotals, currencySymbol, totalBaseline, null, eventId);
       connectSocket();
 
-      // Countdown timer updates every second
-      countdownInterval = setInterval(() => {
-        updateCountdown();
-      }, 1000);
-      updateCountdown();
-      
-      // If auction is already live when page loads, start x-axis tracking
-      if (auctionLive && !auctionPaused && auctionStart) {
-        console.log('Auction already live on page load, starting x-axis tracking');
-        AuctionGraphs.startXAxisExpansion(auctionStart);
-      }
+      // All timing is now controlled by server via time_sync events
+      // No client-side countdown intervals needed
     });
   </script>
 </body>

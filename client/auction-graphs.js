@@ -33,10 +33,9 @@
 
 let chart = null;
 let ctx = null;
-let xAxisUpdateInterval = null;
 let auctionStartTime = null;
-let elapsedTimeAtPause = 0; // Track elapsed time when paused
 let currentBaselineValue = null;
+let serverElapsedSeconds = 0; // Track server's elapsed time
 
 function initChart(canvasId, baselineValue = null, currencySymbol = '£') {
   console.log('initChart called with baselineValue:', baselineValue);
@@ -305,85 +304,39 @@ function clearChart() {
   }
   chart = null;
   ctx = null;
-  if (xAxisUpdateInterval) {
-    clearInterval(xAxisUpdateInterval);
-    xAxisUpdateInterval = null;
-  }
   auctionStartTime = null;
-  elapsedTimeAtPause = 0;
   currentBaselineValue = null;
 }
 
 // Start x-axis tracking (call when auction goes live)
 // Pass the actual auction start time from the database
-function startXAxisExpansion(auctionStartTimeFromDB = null) {
-  if (xAxisUpdateInterval) return; // Already running
+// Update x-axis based on server's elapsed time
+function updateXAxisFromServer(elapsedSeconds) {
+  if (!chart || !chart.options || !chart.options.scales || !chart.options.scales.x) return;
   
-  if (auctionStartTimeFromDB) {
-    // Use the actual auction start time from database
-    auctionStartTime = new Date(auctionStartTimeFromDB);
-    // Calculate how much time has already elapsed
-    const now = new Date();
-    elapsedTimeAtPause = Math.max(0, (now - auctionStartTime) / (60 * 1000));
-    console.log('X-axis starting with actual auction start time. Already elapsed:', elapsedTimeAtPause.toFixed(2), 'minutes');
+  serverElapsedSeconds = elapsedSeconds || 0;
+  const elapsedMinutes = serverElapsedSeconds / 60;
+  
+  // Set x-axis max to show elapsed time (rounded up to next 0.5 minute for cleaner display)
+  const displayMax = Math.max(0.5, Math.ceil(elapsedMinutes * 2) / 2);
+  chart.options.scales.x.max = displayMax;
+  
+  // Dynamically adjust step size to keep ~8-12 ticks
+  let stepSize;
+  if (displayMax <= 5) {
+    stepSize = 0.5;  // 0.5-minute intervals for short auctions
+  } else if (displayMax <= 15) {
+    stepSize = 1;    // 1-minute intervals for medium auctions
+  } else if (displayMax <= 30) {
+    stepSize = 2;    // 2-minute intervals
+  } else if (displayMax <= 60) {
+    stepSize = 5;    // 5-minute intervals
   } else {
-    // Fallback: Set the start time to now minus any elapsed time from previous pause
-    auctionStartTime = new Date(Date.now() - (elapsedTimeAtPause * 60 * 1000));
+    stepSize = 10;   // 10-minute intervals for very long auctions
   }
+  chart.options.scales.x.ticks.stepSize = stepSize;
   
-  // Update the x-axis max every second to show current elapsed time
-  xAxisUpdateInterval = setInterval(() => {
-    if (chart && chart.options && chart.options.scales && chart.options.scales.x) {
-      const now = new Date();
-      const elapsedMinutes = (now - auctionStartTime) / (60 * 1000);
-      
-      // Set x-axis max to show elapsed time (rounded up to next 0.5 minute for cleaner display)
-      const displayMax = Math.max(0.5, Math.ceil(elapsedMinutes * 2) / 2);
-      chart.options.scales.x.max = displayMax;
-      
-      // Dynamically adjust step size to keep ~8-12 ticks
-      let stepSize;
-      if (displayMax <= 5) {
-        stepSize = 0.5;  // 0.5-minute intervals for short auctions
-      } else if (displayMax <= 15) {
-        stepSize = 1;    // 1-minute intervals for medium auctions
-      } else if (displayMax <= 30) {
-        stepSize = 2;    // 2-minute intervals
-      } else if (displayMax <= 60) {
-        stepSize = 5;    // 5-minute intervals
-      } else {
-        stepSize = 10;   // 10-minute intervals for very long auctions
-      }
-      chart.options.scales.x.ticks.stepSize = stepSize;
-      
-      chart.update('none');
-    }
-  }, 1000); // Update every second for smooth real-time tracking
-  
-  console.log('X-axis expansion started, tracking elapsed time');
-}
-
-// Stop x-axis expansion and store elapsed time (call when auction pauses)
-function stopXAxisExpansion(freezeAtCurrent = false) {
-  if (xAxisUpdateInterval) {
-    // Store the elapsed time when pausing
-    if (auctionStartTime) {
-      const now = new Date();
-      elapsedTimeAtPause = (now - auctionStartTime) / (60 * 1000); // Convert to minutes
-      console.log('X-axis expansion stopped. Elapsed time:', elapsedTimeAtPause.toFixed(2), 'minutes');
-      
-      // If freezing at current (auction ended), set the max to the current elapsed time
-      if (freezeAtCurrent && chart && chart.options && chart.options.scales && chart.options.scales.x) {
-        const finalMax = Math.max(0.5, Math.ceil(elapsedTimeAtPause * 2) / 2);
-        chart.options.scales.x.max = finalMax;
-        chart.update('none');
-        console.log('X-axis frozen at final max:', finalMax);
-      }
-    }
-    
-    clearInterval(xAxisUpdateInterval);
-    xAxisUpdateInterval = null;
-  }
+  chart.update('none');
 }
 
 // Reset x-axis tracking (call when auction ends or is reset)
@@ -403,8 +356,6 @@ window.AuctionGraphs = {
   showSavingsByBidder,
   showLineItemChart,
   clearChart,
-  startXAxisExpansion,
-  stopXAxisExpansion,
-  resetXAxisTracking,
+  updateXAxisFromServer,
   getColorForBidder: getRandomColor  // Export color function for use in rankings
 };
