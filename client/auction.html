@@ -173,12 +173,25 @@
       return "Starting soon";
     }
     function getRandomColor(seed) {
+      // Add eventId to seed to make colors random per event
+      const fullSeed = eventId ? `${seed}-${eventId}` : seed;
+      
       // Generate a consistent pastel color based on seed string
       let hash = 0;
-      for(let i=0; i<seed.length; i++) {
-        hash = seed.charCodeAt(i) + ((hash << 5) - hash);
+      for(let i=0; i<fullSeed.length; i++) {
+        hash = fullSeed.charCodeAt(i) + ((hash << 5) - hash);
       }
-      const h = hash % 360;
+      
+      // Get hue from hash, but exclude green range (90-150°) to avoid baseline color
+      // Baseline is green: rgba(34, 197, 94, 0.5) ≈ hsl(142, 70%, 45%)
+      let h = Math.abs(hash) % 360;
+      
+      // If in green range, shift to another color
+      if (h >= 90 && h <= 150) {
+        // Shift to red/orange range (0-60) or blue/purple range (200-280)
+        h = (h < 120) ? (h - 90) : (h + 80);
+      }
+      
       return `hsl(${h}, 70%, 60%)`;
     }
 
@@ -415,7 +428,8 @@
             user_name: data.user_name,
             points: [{
               x: 0, // Opening bids at time 0
-              y: data.total
+              y: data.total,
+              isOpening: true // Mark as opening bid for tooltip display
             }]
           });
         });
@@ -617,7 +631,7 @@
         console.log('Baseline changed, reinitializing chart:', totalBaseline);
         AuctionGraphs.initChart('bid-chart', totalBaseline, currencySymbol);
       }
-      AuctionGraphs.showSavingsByBidder(bidderTotals, currencySymbol, totalBaseline);
+      AuctionGraphs.showSavingsByBidder(bidderTotals, currencySymbol, totalBaseline, null, eventId);
 
       // Compute rankings
       const ranking = [];
@@ -640,7 +654,7 @@
         rankedBody.innerHTML = '<tr><td colspan="4" class="text-center text-muted">No bids yet</td></tr>';
       } else {
         rankedBody.innerHTML = ranking.map((r,i) => {
-          const bidderColor = AuctionGraphs.getColorForBidder(r.user_name);
+          const bidderColor = AuctionGraphs.getColorForBidder(r.user_name, eventId);
           return `<tr>
             <td>${i+1}</td>
             <td><span style="color: ${bidderColor}; font-weight: 600;">${r.user_name}</span></td>
@@ -1025,7 +1039,7 @@
       lastTotalBaseline = totalBaseline;
       console.log('Initial chart baseline setup:', totalBaseline);
       AuctionGraphs.initChart('bid-chart', totalBaseline, currencySymbol);
-      AuctionGraphs.showSavingsByBidder(bidderTotals, currencySymbol, totalBaseline);
+      AuctionGraphs.showSavingsByBidder(bidderTotals, currencySymbol, totalBaseline, null, eventId);
       connectSocket();
 
       // Countdown timer updates every second

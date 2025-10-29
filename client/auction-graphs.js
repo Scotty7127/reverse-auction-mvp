@@ -103,7 +103,7 @@ function initChart(canvasId, baselineValue = null, currencySymbol = '£') {
               return `${currencySymbol}${price.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
             },
             label: ctx => {
-              // Show "Org Name @ time" or "Org Name - Opening Bid"
+              // Show "Org Name @ time" or "Org Name @ Opening"
               const d = ctx.raw;
               if (!d) return '';
               const name = ctx.dataset.label || 'Bidder';
@@ -111,7 +111,7 @@ function initChart(canvasId, baselineValue = null, currencySymbol = '£') {
               
               // Check if this is an opening bid
               if (name.toLowerCase().includes('opening') || d.isOpening) {
-                return `${name} - Opening Bid`;
+                return `${name} @ Opening`;
               }
               
               return `${name} @ ${time}`;
@@ -157,12 +157,25 @@ function updateChart(datasets) {
   chart.update('none');
 }
 
-function getRandomColor(seed) {
+function getRandomColor(seed, eventId = null) {
+  // Add eventId to seed to make colors random per event
+  const fullSeed = eventId ? `${seed}-${eventId}` : seed;
+  
   let hash = 0;
-  for (let i = 0; i < seed.length; i++) {
-    hash = seed.charCodeAt(i) + ((hash << 5) - hash);
+  for (let i = 0; i < fullSeed.length; i++) {
+    hash = fullSeed.charCodeAt(i) + ((hash << 5) - hash);
   }
-  const h = hash % 360;
+  
+  // Get hue from hash, but exclude green range (90-150°) to avoid baseline color
+  // Baseline is green: rgba(34, 197, 94, 0.5) ≈ hsl(142, 70%, 45%)
+  let h = Math.abs(hash) % 360;
+  
+  // If in green range, shift to another color
+  if (h >= 90 && h <= 150) {
+    // Shift to red/orange range (0-60) or blue/purple range (200-280)
+    h = (h < 120) ? (h - 90) : (h + 80);
+  }
+  
   return `hsl(${h}, 70%, 60%)`;
 }
 
@@ -170,7 +183,7 @@ function getRandomColor(seed) {
 
 // Helper: Aggregate total price over time for a bidder
 // 1️⃣ Savings by Bidder (default)
-function showSavingsByBidder(biddersMap, currencySymbol = '£', baselineValue = null, reserveValue = null) {
+function showSavingsByBidder(biddersMap, currencySymbol = '£', baselineValue = null, reserveValue = null, eventId = null) {
   if (!chart) initChart('bid-chart');
   
   // biddersMap should contain { user_name, points: [{x, y}] }
@@ -181,7 +194,7 @@ function showSavingsByBidder(biddersMap, currencySymbol = '£', baselineValue = 
     return {
       label: bidder.user_name,
       data: points,
-      borderColor: getRandomColor(bidder.user_name),
+      borderColor: getRandomColor(bidder.user_name, eventId),
       fill: false,
       tension: 0.3,
       borderWidth: 2,
@@ -232,7 +245,7 @@ function showSavingsByBidder(biddersMap, currencySymbol = '£', baselineValue = 
     const time = d.x ? `${d.x.toFixed(1)}m` : '';
     
     if (name.toLowerCase().includes('opening') || d.isOpening) {
-      return `${name} - Opening Bid`;
+      return `${name} @ Opening`;
     }
     
     return `${name} @ ${time}`;
@@ -242,7 +255,7 @@ function showSavingsByBidder(biddersMap, currencySymbol = '£', baselineValue = 
 }
 
 // 2️⃣ Specific Line Item Chart
-function showLineItemChart(lineItemId, allBids, baselineMap, auctionStart, currencySymbol = '£', baselineValue = null, reserveValue = null) {
+function showLineItemChart(lineItemId, allBids, baselineMap, auctionStart, currencySymbol = '£', baselineValue = null, reserveValue = null, eventId = null) {
   if (!chart) initChart('bid-chart');
   const li = baselineMap.get(lineItemId);
   if (!li) {
@@ -260,7 +273,7 @@ function showLineItemChart(lineItemId, allBids, baselineMap, auctionStart, curre
   const datasets = Object.entries(bidders).map(([name, points]) => ({
     label: name,
     data: points.sort((a,b)=>a.x-b.x),
-    borderColor: getRandomColor(name),
+    borderColor: getRandomColor(name, eventId),
     fill: false,
     tension: 0.3,
     borderWidth: 2,
