@@ -11,7 +11,7 @@
         Chart.register(annotationPlugin.default || annotationPlugin);
         console.log('✓ Chart.js Annotation plugin registered successfully');
         console.log('✓ Chart.js version:', Chart.version);
-        console.log('✓ Registered plugins:', Chart.registry.plugins.keys());
+        console.log('✓ Registered plugins:', Array.from(Chart.registry.plugins.keys()));
       } catch (e) {
         console.error('✗ Failed to register annotation plugin:', e);
       }
@@ -169,54 +169,15 @@ function getRandomColor(seed) {
 // --- Graph Types ---
 
 // Helper: Aggregate total price over time for a bidder
-function aggregateTotalPriceSeries(bids) {
-  // bids: array of { time, extendedBid, savings, line_item_id, rawBid }
-  if (!Array.isArray(bids) || bids.length === 0) return [];
-  const sorted = bids.slice().sort((a, b) => a.time - b.time);
-  const currentPriceByLine = new Map();
-  const series = [];
-  
-  // Group bids by time to handle multiple line items bid at the same time
-  const bidsByTime = new Map();
-  for (const b of sorted) {
-    if (!b) continue;
-    const t = typeof b.time === 'number' ? b.time : 0;
-    if (!bidsByTime.has(t)) {
-      bidsByTime.set(t, []);
-    }
-    bidsByTime.get(t).push(b);
-  }
-  
-  // Process each time point
-  for (const [t, bidsAtTime] of Array.from(bidsByTime.entries()).sort((a, b) => a[0] - b[0])) {
-    // Update price for all line items bid at this time
-    for (const b of bidsAtTime) {
-      if (b.line_item_id != null) {
-        currentPriceByLine.set(b.line_item_id, Number(b.extendedBid) || 0);
-      }
-    }
-    
-    // Calculate total price across all line items
-    let totalPrice = 0;
-    currentPriceByLine.forEach(v => { if (Number.isFinite(v)) totalPrice += v; });
-    
-    // Add one point per time (even if multiple line items were bid)
-    series.push({ 
-      x: t, 
-      y: totalPrice,
-      isOpening: bidsAtTime.some(b => b.rawBid?.id?.toString().startsWith('opening-'))
-    });
-  }
-  
-  return series;
-}
-
 // 1️⃣ Savings by Bidder (default)
 function showSavingsByBidder(biddersMap, currencySymbol = '£', baselineValue = null, reserveValue = null) {
   if (!chart) initChart('bid-chart');
-  // Each Y value is the total price across all line items for the bidder
+  
+  // biddersMap should contain { user_name, points: [{x, y}] }
+  // where points are the total prices at each submission time
   const datasets = Array.from(biddersMap.values()).map(bidder => {
-    const points = aggregateTotalPriceSeries(bidder.bids || []);
+    const points = bidder.points || [];
+    
     return {
       label: bidder.user_name,
       data: points,
@@ -390,13 +351,21 @@ function startXAxisExpansion(auctionStartTimeFromDB = null) {
 }
 
 // Stop x-axis expansion and store elapsed time (call when auction pauses)
-function stopXAxisExpansion() {
+function stopXAxisExpansion(freezeAtCurrent = false) {
   if (xAxisUpdateInterval) {
     // Store the elapsed time when pausing
     if (auctionStartTime) {
       const now = new Date();
       elapsedTimeAtPause = (now - auctionStartTime) / (60 * 1000); // Convert to minutes
       console.log('X-axis expansion stopped. Elapsed time:', elapsedTimeAtPause.toFixed(2), 'minutes');
+      
+      // If freezing at current (auction ended), set the max to the current elapsed time
+      if (freezeAtCurrent && chart && chart.options && chart.options.scales && chart.options.scales.x) {
+        const finalMax = Math.max(0.5, Math.ceil(elapsedTimeAtPause * 2) / 2);
+        chart.options.scales.x.max = finalMax;
+        chart.update('none');
+        console.log('X-axis frozen at final max:', finalMax);
+      }
     }
     
     clearInterval(xAxisUpdateInterval);

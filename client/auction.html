@@ -192,6 +192,8 @@
     let auctionLive = false;
     let auctionPaused = false;
     let pausedTimeRemaining = null; // Store time remaining when paused
+    let totalPausedTime = 0; // Track total time spent paused (in ms)
+    let pauseStartTime = null; // Track when current pause started
     let extensionCount = 0; // Track number of extensions triggered
     let countdownInterval = null;
     // Chart.js chart handled by AuctionGraphs module
@@ -200,6 +202,7 @@
     let allBids = []; // all bids loaded or received live
     let openingBids = []; // injected opening bids from supplier assignments
     let biddersMap = new Map(); // bidderId -> { user_name, bids: [{time, weightedBid, savings}] }
+    let bidderTotals = new Map(); // bidderId -> { user_name, points: [{x, y}] } for graph
     let baselineMap = new Map(); // line_item_id -> { ext_baseline, ext_quantity, item_number, item_name }
 
     // --- DOM elements ---
@@ -270,15 +273,19 @@
         
         const msLeft = auctionEnd - now;
         if(msLeft <= 0){
+          // Calculate total elapsed time from start to end, excluding paused time
+          const totalElapsedMs = (now - auctionStart) - totalPausedTime;
+          const totalElapsedFormatted = formatHMS(totalElapsedMs);
+          
           timeMainEl.textContent = 'Auction ended';
-          timeSubEl.textContent = '';
+          timeSubEl.textContent = `Total time: ${totalElapsedFormatted}`;
           pauseResumeBtn.disabled = true;
           auctionLive = false;
           auctionPaused = true;
           setPauseButtonState(false);
           clearInterval(countdownInterval);
-          // Stop x-axis expansion when auction ends
-          AuctionGraphs.stopXAxisExpansion();
+          // Stop x-axis expansion and freeze at current time when auction ends
+          AuctionGraphs.stopXAxisExpansion(true);
           return;
         }
         timeMainEl.textContent = `Time left: ${formatHMS(msLeft)}`;
@@ -371,6 +378,8 @@
       // This allows pre-assigned opening prices to display as first bids
       const supplierAssignments = eventData.supplier_assignments || eventData.assigned_suppliers;
       if (Array.isArray(supplierAssignments)) {
+        const openingTotalsBySupplier = new Map();
+        
         for (const sa of supplierAssignments) {
           if (sa.opening_bid !== undefined && sa.opening_bid !== null) {
             openingBids.push({
@@ -382,8 +391,35 @@
               weighting: Number(sa.weighting) || 1,
               created_at: eventData.auction_time || new Date().toISOString()
             });
+            
+            // Calculate total for this supplier
+            if (!openingTotalsBySupplier.has(sa.supplier_id)) {
+              openingTotalsBySupplier.set(sa.supplier_id, {
+                user_name: sa.supplier_name || `Supplier ${sa.supplier_id}`,
+                total: 0
+              });
+            }
+            
+            const li = baselineMap.get(sa.line_item_id);
+            const extQuantity = li?.ext_quantity || 1;
+            const weighting = Number(sa.weighting) || 1;
+            const extendedBid = Number(sa.opening_bid) * weighting * extQuantity;
+            
+            openingTotalsBySupplier.get(sa.supplier_id).total += extendedBid;
           }
         }
+        
+        // Add opening totals to bidderTotals
+        openingTotalsBySupplier.forEach((data, supplierId) => {
+          bidderTotals.set(supplierId, {
+            user_name: data.user_name,
+            points: [{
+              x: 0, // Opening bids at time 0
+              y: data.total
+            }]
+          });
+        });
+        
         processBids();
         updateChartAndTable();
       }
@@ -416,10 +452,108 @@
           if (!existingIds.has(String(ob.id))) allBids.unshift(ob);
         });
         processBids();
+        rebuildBidderTotalsFromHistory(); // Rebuild totals once from history
         updateChartAndTable();
       } catch(e) {
         console.error('Bids error', e);
       }
+    }
+
+    // Rebuild bidderTotals from existing bids (called ONLY on page load)
+    function rebuildBidderTotalsFromHistory() {
+      console.log('Rebuilding bidder totals from historical bids...');
+      
+      // Group all bids by user
+      const userBids = new Map(); // user_id -> array of all their bids
+      
+      for (const bid of allBids) {
+        if (!bid.user_id || !bid.created_at || bid.amount === undefined) continue;
+        if (!userBids.has(bid.user_id)) {
+          userBids.set(bid.user_id, []);
+        }
+        userBids.get(bid.user_id).push(bid);
+      }
+      
+      // For each user, reconstruct their bid history
+      userBids.forEach((bids, userId) => {
+        // Sort bids chronologically
+        bids.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+        
+        const userName = bids[0].user_name || `Bidder ${userId}`;
+        const points = [];
+        
+        // Track unique submission times (rounded to second to group bulk submissions)
+        const submissionTimes = new Set();
+        
+        for (const bid of bids) {
+          const timestamp = new Date(bid.created_at);
+          const roundedTime = Math.floor(timestamp.getTime() / 1000) * 1000;
+          submissionTimes.add(roundedTime);
+        }
+        
+        // For each submission time, calculate the total based on latest bids for each line item
+        const sortedTimes = Array.from(submissionTimes).sort((a, b) => a - b);
+        
+        for (const timestamp of sortedTimes) {
+          const createdAt = new Date(timestamp);
+          const elapsedMs = createdAt - auctionStart;
+          const elapsedMinutes = elapsedMs / 60000;
+          
+          // Skip opening bids (already added)
+          if (elapsedMinutes <= 0) continue;
+          
+          // Get the state of all line items at this point in time
+          // For each line item this user has bid on, find the most recent bid up to this time
+          const lineItemState = new Map(); // line_item_id -> latest bid
+          
+          for (const bid of bids) {
+            const bidTime = new Date(bid.created_at).getTime();
+            if (bidTime <= timestamp) {
+              // This bid was placed at or before this submission time
+              const existing = lineItemState.get(bid.line_item_id);
+              if (!existing || new Date(existing.created_at).getTime() < bidTime) {
+                lineItemState.set(bid.line_item_id, bid);
+              }
+            }
+          }
+          
+          // Calculate total from this state
+          let total = 0;
+          lineItemState.forEach((bid, lineItemId) => {
+            const li = baselineMap.get(lineItemId);
+            const extQuantity = li?.ext_quantity || 1;
+            const weighting = Number(bid.weighting) || 1;
+            const extendedBid = Number(bid.amount) * weighting * extQuantity;
+            total += extendedBid;
+          });
+          
+          points.push({
+            x: elapsedMinutes,
+            y: total
+          });
+        }
+        
+        // Add or update bidder in bidderTotals
+        if (points.length > 0) {
+          if (bidderTotals.has(userId)) {
+            // Merge with existing opening bid point
+            const existing = bidderTotals.get(userId);
+            existing.points.push(...points);
+          } else {
+            // New bidder
+            bidderTotals.set(userId, {
+              user_name: userName,
+              points: points
+            });
+          }
+        }
+      });
+      
+      console.log('Bidder totals rebuilt:', Array.from(bidderTotals.entries()).map(([id, data]) => ({
+        userId: id,
+        userName: data.user_name,
+        pointCount: data.points.length
+      })));
     }
 
     // --- Process bids for chart and ranking ---
@@ -429,6 +563,10 @@
 
       // Sort bids by created_at ascending for time series
       allBids.sort((a,b) => new Date(a.created_at) - new Date(b.created_at));
+
+      // NOTE: bidderTotals is NOT rebuilt here - it's only populated on initial page load
+      // and updated via socket events (bidder_total_update) to avoid recreating multiple
+      // points per line item bid
 
       for(const bid of allBids){
         if(!bid.user_id) continue;
@@ -479,7 +617,7 @@
         console.log('Baseline changed, reinitializing chart:', totalBaseline);
         AuctionGraphs.initChart('bid-chart', totalBaseline, currencySymbol);
       }
-      AuctionGraphs.showSavingsByBidder(biddersMap, currencySymbol, totalBaseline);
+      AuctionGraphs.showSavingsByBidder(bidderTotals, currencySymbol, totalBaseline);
 
       // Compute rankings
       const ranking = [];
@@ -529,7 +667,13 @@
         const li = baselineMap.get(b.line_item_id);
         const lineNum = li?.item_number || b.line_item_id || '-';
         const lineName = li?.item_name || '-';
-        const timeInAuction = auctionStart ? ((new Date(b.created_at) - auctionStart)/60000).toFixed(1) + 'm' : '-';
+        let timeInAuction = '-';
+        if (auctionStart) {
+          const elapsedMs = new Date(b.created_at) - auctionStart;
+          const mins = Math.floor(elapsedMs / 60000);
+          const secs = Math.floor((elapsedMs % 60000) / 1000);
+          timeInAuction = `${mins}m ${secs}s`;
+        }
         const bidAmount = fmtMoney(b.amount || 0, currencySymbol);
         const isOpeningBid = String(b.id).startsWith('opening-');
         return `<tr class="bid-row ${isOpeningBid ? 'opening-bid' : 'selectable-bid'}" data-bid-id="${b.id}" data-bid-amount="${b.amount}" data-is-opening="${isOpeningBid}">
@@ -651,9 +795,36 @@
       socket.on('bid_update', (bid) => {
         if(!bid.user_id) return;
         allBids.push(bid);
-        processBids();
-        updateChartAndTable();
+        processBids(); // Only updates biddersMap for rankings, NOT bidderTotals
+        // Note: bidderTotals is updated via bidder_total_update event only
         loadStats();
+      });
+
+      socket.on('bidder_total_update', (data) => {
+        // data: { user_id, user_name, total }
+        console.log('Bidder total update:', data);
+        
+        // Calculate elapsed time in minutes
+        const now = new Date();
+        const elapsedMs = (now - auctionStart) - totalPausedTime;
+        const elapsedMinutes = elapsedMs / 60000;
+        
+        // Get or create bidder entry in bidderTotals
+        if (!bidderTotals.has(data.user_id)) {
+          bidderTotals.set(data.user_id, {
+            user_name: data.user_name,
+            points: []
+          });
+        }
+        
+        const bidder = bidderTotals.get(data.user_id);
+        bidder.points.push({
+          x: elapsedMinutes,
+          y: data.total
+        });
+        
+        // Update chart
+        updateChartAndTable();
       });
 
       socket.on('bid_updated', async (data) => {
@@ -679,6 +850,8 @@
       socket.on('bidders_count_update', loadStats);
 
       socket.on('auction_paused', () => {
+        // Track when pause started
+        pauseStartTime = new Date();
         // Store the time remaining when paused
         if(auctionEnd){
           pausedTimeRemaining = auctionEnd - new Date();
@@ -689,6 +862,11 @@
       });
 
       socket.on('auction_resumed', () => {
+        // Add paused duration to total
+        if(pauseStartTime !== null){
+          totalPausedTime += (new Date() - pauseStartTime);
+          pauseStartTime = null;
+        }
         // Recalculate auction end time based on stored remaining time
         if(pausedTimeRemaining !== null){
           auctionEnd = new Date(new Date().getTime() + pausedTimeRemaining);
@@ -736,11 +914,18 @@
           if(isPause){
             auctionPaused = true;
             setPauseButtonState(true);
+            // Track when pause started
+            pauseStartTime = new Date();
             // Store time remaining when pausing
             if(auctionEnd){
               pausedTimeRemaining = auctionEnd - new Date();
             }
           } else {
+            // Add paused duration to total
+            if(pauseStartTime !== null){
+              totalPausedTime += (new Date() - pauseStartTime);
+              pauseStartTime = null;
+            }
             // Recalculate end time when resuming
             if(pausedTimeRemaining !== null){
               auctionEnd = new Date(new Date().getTime() + pausedTimeRemaining);
@@ -840,7 +1025,7 @@
       lastTotalBaseline = totalBaseline;
       console.log('Initial chart baseline setup:', totalBaseline);
       AuctionGraphs.initChart('bid-chart', totalBaseline, currencySymbol);
-      AuctionGraphs.showSavingsByBidder(biddersMap, currencySymbol, totalBaseline);
+      AuctionGraphs.showSavingsByBidder(bidderTotals, currencySymbol, totalBaseline);
       connectSocket();
 
       // Countdown timer updates every second

@@ -191,6 +191,48 @@ module.exports = (io) => {
         io.to(`event_${eventId}`).emit("bid_update", enriched);
       }
 
+      // Calculate and emit the bidder's total after all bids are submitted
+      if (insertedBids.length > 0) {
+        // Query the LATEST bid for each line item for this user
+        // This gives us their current total position across all line items
+        const totalRes = await pool.query(
+          `SELECT 
+             b.amount,
+             b.line_item_id,
+             li.ext_quantity,
+             COALESCE(s.weighting, 1.0) AS weighting
+           FROM bids b
+           JOIN line_items li ON li.id = b.line_item_id
+           LEFT JOIN supplier_line_item_settings s ON s.event_id = b.event_id 
+             AND s.line_item_id = b.line_item_id 
+             AND s.supplier_id = b.user_id
+           WHERE b.event_id = $1 
+             AND b.user_id = $2
+             AND b.id IN (
+               SELECT MAX(id) 
+               FROM bids 
+               WHERE event_id = $1 AND user_id = $2 
+               GROUP BY line_item_id
+             )`,
+          [eventId, userId]
+        );
+
+        let total = 0;
+        for (const row of totalRes.rows) {
+          const extendedBid = row.amount * row.weighting * row.ext_quantity;
+          total += extendedBid;
+        }
+
+        console.log(`Bidder total calculated for user ${userId}: ${total} (from ${totalRes.rows.length} line items)`);
+
+        // Emit the total to the auction room
+        io.to(`event_${eventId}`).emit("bidder_total_update", {
+          user_id: userId,
+          user_name: u.organisation_name || `[NO ORG] ${u.email || userId}`,
+          total: total
+        });
+      }
+
       // Check if extension should be triggered (check once after all bids)
       if (event && event.auction_end_time && event.type !== 'paused' && !extensionTriggered) {
         const now = new Date();
