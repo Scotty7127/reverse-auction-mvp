@@ -94,7 +94,8 @@ async function runMigrations() {
       ADD COLUMN IF NOT EXISTS support_contact_phone TEXT,
       ADD COLUMN IF NOT EXISTS bid_manager_name TEXT,
       ADD COLUMN IF NOT EXISTS bid_manager_country_code TEXT,
-      ADD COLUMN IF NOT EXISTS bid_manager_phone TEXT;
+      ADD COLUMN IF NOT EXISTS bid_manager_phone TEXT,
+      ADD COLUMN IF NOT EXISTS paused_time_remaining INTEGER;
     `);
 
     // === INVITATIONS ===

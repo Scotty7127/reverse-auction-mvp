@@ -279,7 +279,32 @@ module.exports = (io) => {
         return res.status(403).json({ error: "You are not a team member of this event" });
       }
 
-      await pool.query("UPDATE events SET type = 'paused' WHERE id=$1", [eventId]);
+      // Get current auction end time to calculate time remaining
+      const eventRes = await pool.query(
+        `SELECT auction_end_time FROM events WHERE id = $1`,
+        [eventId]
+      );
+      const event = eventRes.rows[0];
+      
+      // Calculate and store time remaining when pausing
+      if (event && event.auction_end_time) {
+        const now = new Date();
+        const endTime = new Date(event.auction_end_time);
+        const secondsRemaining = Math.max(0, Math.floor((endTime - now) / 1000));
+        
+        // Store the time remaining in a new column (or we can use existing field)
+        await pool.query(
+          `UPDATE events 
+           SET type = 'paused',
+               paused_time_remaining = $2
+           WHERE id = $1`,
+          [eventId, secondsRemaining]
+        );
+      } else {
+        // No end time set, just pause
+        await pool.query("UPDATE events SET type = 'paused' WHERE id=$1", [eventId]);
+      }
+
       io.to(`event_${eventId}`).emit("auction_paused");
       res.json({ success: true });
     } catch (err) {
@@ -303,7 +328,31 @@ module.exports = (io) => {
         return res.status(403).json({ error: "You are not a team member of this event" });
       }
 
-      await pool.query("UPDATE events SET type = 'open' WHERE id=$1", [eventId]);
+      // Get the stored time remaining from when it was paused
+      const eventRes = await pool.query(
+        `SELECT paused_time_remaining FROM events WHERE id = $1`,
+        [eventId]
+      );
+      const event = eventRes.rows[0];
+      
+      // Calculate new end time based on time remaining
+      if (event && event.paused_time_remaining !== null) {
+        const now = new Date();
+        const newEndTime = new Date(now.getTime() + (event.paused_time_remaining * 1000));
+        
+        await pool.query(
+          `UPDATE events 
+           SET type = 'open',
+               auction_end_time = $2,
+               paused_time_remaining = NULL
+           WHERE id = $1`,
+          [eventId, newEndTime]
+        );
+      } else {
+        // No stored time, just resume
+        await pool.query("UPDATE events SET type = 'open' WHERE id=$1", [eventId]);
+      }
+
       io.to(`event_${eventId}`).emit("auction_resumed");
       res.json({ success: true });
     } catch (err) {
@@ -852,7 +901,7 @@ module.exports = (io) => {
         [eventId]
       );
       const eventResult = await pool.query(
-        `SELECT e.auction_time, e.type, e.title, o.name AS organisation_name, c.name AS category_name
+        `SELECT e.auction_time, e.auction_end_time, e.type, e.title, o.name AS organisation_name, c.name AS category_name
          FROM events e
          LEFT JOIN organisations o ON e.organisation_id = o.id
          LEFT JOIN categories c ON e.category_id = c.id
@@ -867,6 +916,7 @@ module.exports = (io) => {
         total_bidders: Number(totalMembers.rows[0].total_bidders || 0),
         last_bid_time: bids.rows[0].last_bid_time,
         auction_time: event ? event.auction_time : null,
+        auction_end_time: event ? event.auction_end_time : null,
         type: event ? event.type : null,
         title: event ? event.title : null,
         organisation_name: event ? event.organisation_name : null,

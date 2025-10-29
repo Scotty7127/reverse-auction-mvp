@@ -77,6 +77,10 @@ app.use("/", staticRoutes);
 
 // ---- Socket.IO Setup ----
 require("./sockets/socket-messaging")(io);
+const auctionTimer = require("./sockets/socket-auction-timer")(io);
+
+// Make timer available globally for routes to use
+global.auctionTimer = auctionTimer;
 
 // ---- Start server ----
 server.listen(4000, () => {

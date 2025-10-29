@@ -276,34 +276,46 @@
           AuctionGraphs.startXAxisExpansion(auctionStart);
         }
       }
-      if(auctionLive){
-        // If paused, display the frozen time
-        if(auctionPaused && pausedTimeRemaining !== null){
-          timeMainEl.textContent = `⏸️ ${formatHMS(pausedTimeRemaining)}`;
-          timeSubEl.textContent = 'Paused';
-          return;
-        }
-        
-        const msLeft = auctionEnd - now;
-        if(msLeft <= 0){
-          // Calculate total elapsed time from start to end, excluding paused time
-          const totalElapsedMs = (now - auctionStart) - totalPausedTime;
-          const totalElapsedFormatted = formatHMS(totalElapsedMs);
-          
-          timeMainEl.textContent = 'Auction ended';
-          timeSubEl.textContent = `Total time: ${totalElapsedFormatted}`;
-          pauseResumeBtn.disabled = true;
-          auctionLive = false;
-          auctionPaused = true;
-          setPauseButtonState(false);
-          clearInterval(countdownInterval);
-          // Stop x-axis expansion and freeze at current time when auction ends
-          AuctionGraphs.stopXAxisExpansion(true);
-          return;
-        }
-        timeMainEl.textContent = `Time left: ${formatHMS(msLeft)}`;
-        timeSubEl.textContent = '';
+      // Note: Live auction countdown is now handled by server time_sync events
+      // This function only handles pre-auction countdown
+    }
+
+    // --- Update countdown from server time sync (AUTHORITATIVE) ---
+    function updateCountdownFromServer(secondsRemaining, isPaused) {
+      if (!auctionLive) return; // Only update if auction is live
+      
+      if (isPaused && pausedTimeRemaining !== null) {
+        timeMainEl.textContent = `⏸️ ${formatHMS(pausedTimeRemaining)}`;
+        timeSubEl.textContent = 'Paused';
+        return;
       }
+      
+      if (secondsRemaining === null || secondsRemaining === undefined) {
+        timeMainEl.textContent = 'Time not set';
+        return;
+      }
+      
+      if (secondsRemaining <= 0) {
+        // Calculate total elapsed time from start to end, excluding paused time
+        const now = new Date();
+        const totalElapsedMs = (now - auctionStart) - totalPausedTime;
+        const totalElapsedFormatted = formatHMS(totalElapsedMs);
+        
+        timeMainEl.textContent = 'Auction ended';
+        timeSubEl.textContent = `Total time: ${totalElapsedFormatted}`;
+        pauseResumeBtn.disabled = true;
+        auctionLive = false;
+        auctionPaused = true;
+        setPauseButtonState(false);
+        clearInterval(countdownInterval);
+        // Stop x-axis expansion and freeze at current time when auction ends
+        AuctionGraphs.stopXAxisExpansion(true);
+        return;
+      }
+      
+      const msLeft = secondsRemaining * 1000;
+      timeMainEl.textContent = `Time left: ${formatHMS(msLeft)}`;
+      timeSubEl.textContent = '';
     }
 
     // --- Initialize auction end time on server when auction goes live ---
@@ -806,6 +818,31 @@
       });
       socket.emit('join_event', eventId);
 
+      // SERVER AUTHORITATIVE TIME - Critical for consistency across all users
+      socket.on('time_sync', (data) => {
+        const { secondsRemaining, isPaused: serverPaused, endTime } = data;
+        
+        // Update pause state from server
+        if (serverPaused !== auctionPaused) {
+          auctionPaused = serverPaused;
+          setPauseButtonState(serverPaused);
+          
+          if (serverPaused) {
+            AuctionGraphs.stopXAxisExpansion();
+          } else {
+            AuctionGraphs.startXAxisExpansion(auctionStart);
+          }
+        }
+        
+        // Update end time if provided
+        if (endTime) {
+          auctionEnd = new Date(endTime);
+        }
+        
+        // Update countdown display with server's authoritative time
+        updateCountdownFromServer(secondsRemaining, serverPaused);
+      });
+
       socket.on('bid_update', (bid) => {
         if(!bid.user_id) return;
         allBids.push(bid);
@@ -863,38 +900,22 @@
 
       socket.on('bidders_count_update', loadStats);
 
+      // Note: Pause/resume state is now primarily handled by time_sync event
+      // These handlers are kept for notifications and backwards compatibility
       socket.on('auction_paused', () => {
-        // Track when pause started
-        pauseStartTime = new Date();
-        // Store the time remaining when paused
-        if(auctionEnd){
-          pausedTimeRemaining = auctionEnd - new Date();
-        }
-        auctionPaused = true;
-        setPauseButtonState(true);
-        AuctionGraphs.stopXAxisExpansion();
+        console.log('Auction paused notification received');
+        // State is updated via time_sync, just show notification if needed
       });
 
       socket.on('auction_resumed', () => {
-        // Add paused duration to total
-        if(pauseStartTime !== null){
-          totalPausedTime += (new Date() - pauseStartTime);
-          pauseStartTime = null;
-        }
-        // Recalculate auction end time based on stored remaining time
-        if(pausedTimeRemaining !== null){
-          auctionEnd = new Date(new Date().getTime() + pausedTimeRemaining);
-          pausedTimeRemaining = null;
-        }
-        auctionPaused = false;
-        setPauseButtonState(false);
-        AuctionGraphs.startXAxisExpansion(auctionStart);
+        console.log('Auction resumed notification received');
+        // State is updated via time_sync, refresh chart
         updateChartAndTable();
       });
 
       socket.on('auction_extended', (data) => {
         console.log('Auction extended!', data);
-        // Update the auction end time
+        // Update the auction end time (time_sync will broadcast the new time)
         if (data.newEndTime) {
           auctionEnd = new Date(data.newEndTime);
           extensionCount++;
@@ -903,7 +924,7 @@
           // Show a visual notification
           timeSubEl.textContent = `⏱️ Extended by ${data.extensionTime}s`;
           setTimeout(() => {
-            if (!auctionPaused) timeSubEl.textContent = '';
+            timeSubEl.textContent = '';
           }, 3000);
         }
       });
