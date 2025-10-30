@@ -74,9 +74,9 @@ module.exports = (pool) => {
 
       // Send email
       // Dynamically determine the app URL based on environment
+      // Priority: APP_URL (custom) > RENDER_EXTERNAL_URL (auto) > localhost (dev)
       const appUrl = process.env.APP_URL || 
-                     process.env.RENDER_EXTERNAL_URL || 
-                     "http://localhost:4000";
+                     (process.env.RENDER_EXTERNAL_URL || "http://localhost:4000");
       const inviteLink = `${appUrl}/invite/${token}`;
       
       try {
