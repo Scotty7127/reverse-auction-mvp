@@ -1,4 +1,12 @@
-require("dotenv").config();
+// Load environment variables from .env file in development
+// In production (Render), environment variables are set directly and .env doesn't exist
+require("dotenv").config({ path: '.env' });
+
+console.log("🔍 Environment check on startup:");
+console.log("  - NODE_ENV:", process.env.NODE_ENV);
+console.log("  - APP_URL:", process.env.APP_URL);
+console.log("  - RENDER_EXTERNAL_URL:", process.env.RENDER_EXTERNAL_URL);
+
 const express = require("express");
 const http = require("http");
 const { Server } = require("socket.io");
