@@ -76,14 +76,17 @@ module.exports = (pool) => {
 
       // Send email
       // Dynamically determine the app URL based on environment
-      // Priority: APP_URL (custom) > RENDER_EXTERNAL_URL (auto) > localhost (dev)
+      // Priority: APP_URL (custom) > hardcoded tendersmith.com in production > RENDER_EXTERNAL_URL (auto) > localhost (dev)
       console.log("🔍 Environment variables check:");
       console.log("  - APP_URL:", process.env.APP_URL);
       console.log("  - RENDER_EXTERNAL_URL:", process.env.RENDER_EXTERNAL_URL);
       console.log("  - All env keys containing 'URL':", Object.keys(process.env).filter(k => k.includes('URL')));
       
+      // Temporary workaround: hardcode tendersmith.com for production
       const appUrl = process.env.APP_URL || 
-                     (process.env.RENDER_EXTERNAL_URL || "http://localhost:4000");
+                     (process.env.NODE_ENV === 'production' ? 'https://tendersmith.com' : null) ||
+                     process.env.RENDER_EXTERNAL_URL || 
+                     "http://localhost:4000";
       const inviteLink = `${appUrl}/invite/${token}`;
       
       console.log("📧 Sending invite with APP_URL:", process.env.APP_URL);
@@ -291,6 +294,7 @@ module.exports = (pool) => {
 
       // Send reset email
       const appUrl = process.env.APP_URL || 
+                     (process.env.NODE_ENV === 'production' ? 'https://tendersmith.com' : null) ||
                      process.env.RENDER_EXTERNAL_URL || 
                      "http://localhost:4000";
       const resetLink = `${appUrl}/reset-password/${resetToken}`;
