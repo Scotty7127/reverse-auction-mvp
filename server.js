@@ -76,13 +76,36 @@ const staticRoutes = require("./routes/route-static")();
 app.use("/", staticRoutes);
 
 // ---- Migrations: run automatically on startup ----
+async function connectWithRetry(maxRetries = 5, delayMs = 3000) {
+  for (let i = 0; i < maxRetries; i++) {
+    try {
+      const client = await pool.connect();
+      console.log("✅ Database connected successfully");
+      client.release();
+      return true;
+    } catch (err) {
+      console.log(`⏳ Database connection attempt ${i + 1}/${maxRetries} failed: ${err.message}`);
+      if (i < maxRetries - 1) {
+        console.log(`   Retrying in ${delayMs/1000} seconds...`);
+        await new Promise(resolve => setTimeout(resolve, delayMs));
+      }
+    }
+  }
+  console.error("❌ Database connection failed after all retries");
+  return false;
+}
+
 (async () => {
-  try {
-    await pool.connect();
-    console.log("✅ Database connected successfully");
-    await runMigrations();
-  } catch (err) {
-    console.error("❌ Database connection failed:", err.message);
+  const connected = await connectWithRetry();
+  if (connected) {
+    try {
+      await runMigrations();
+      console.log("✅ Migrations completed");
+    } catch (err) {
+      console.error("❌ Migration failed:", err.message);
+    }
+  } else {
+    console.warn("⚠️ Starting server without database connection");
   }
 })();
 
