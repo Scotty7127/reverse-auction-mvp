@@ -183,5 +183,66 @@ module.exports = (pool) => {
     }
   });
 
+  // === Request Access (sends email to admin) ===
+  router.post("/request-access", async (req, res) => {
+    try {
+      const { fullName, company, email } = req.body;
+
+      if (!fullName || !company || !email) {
+        return res.status(400).json({ error: "All fields are required" });
+      }
+
+      // Send email notification to admin
+      try {
+        const transporter = nodemailer.createTransport({
+          service: "gmail",
+          auth: {
+            user: process.env.EMAIL_USER,
+            pass: process.env.EMAIL_PASS,
+          },
+        });
+
+        await transporter.sendMail({
+          from: process.env.EMAIL_USER,
+          to: "scotty@tendersmith.com",
+          subject: "New Access Request - Tendersmith",
+          html: `
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+              <h2 style="color: #0078d4;">New Access Request</h2>
+              <p>Someone has requested access to Tendersmith:</p>
+              <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
+                <tr>
+                  <td style="padding: 8px; border: 1px solid #ddd; background: #f8f9fa; font-weight: bold; width: 150px;">Name:</td>
+                  <td style="padding: 8px; border: 1px solid #ddd;">${fullName}</td>
+                </tr>
+                <tr>
+                  <td style="padding: 8px; border: 1px solid #ddd; background: #f8f9fa; font-weight: bold;">Company:</td>
+                  <td style="padding: 8px; border: 1px solid #ddd;">${company}</td>
+                </tr>
+                <tr>
+                  <td style="padding: 8px; border: 1px solid #ddd; background: #f8f9fa; font-weight: bold;">Email:</td>
+                  <td style="padding: 8px; border: 1px solid #ddd;">${email}</td>
+                </tr>
+              </table>
+              <p style="color: #666; font-size: 14px;">
+                To grant access, send them an invitation from the Tendersmith account page.
+              </p>
+            </div>
+          `,
+        });
+
+        res.json({ 
+          message: "Access request submitted successfully"
+        });
+      } catch (emailErr) {
+        console.error("Error sending access request email:", emailErr);
+        res.status(500).json({ error: "Failed to send access request" });
+      }
+    } catch (err) {
+      console.error("Error processing access request:", err);
+      res.status(500).json({ error: "Failed to process request" });
+    }
+  });
+
   return router;
 };

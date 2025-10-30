@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Sign In | Reverse Auction</title>
+  <title>Sign In | Tendersmith</title>
   <link rel="stylesheet" href="css/style.css">
   <link rel="stylesheet" href="css/login.css">
   <style>
@@ -25,19 +25,39 @@
       text-align: center;
     }
 
+    .brand-header {
+      font-size: 28px;
+      font-weight: 600;
+      color: #0078d4;
+      margin-bottom: 10px;
+      letter-spacing: -0.5px;
+    }
+
     h1 {
       font-size: 22px;
       margin-bottom: 20px;
+      color: #333;
     }
 
     input[type="email"],
-    input[type="password"] {
+    input[type="password"],
+    input[type="text"] {
       width: 100%;
-      padding: 10px;
+      padding: 10px 12px;
       margin: 8px 0;
       border: 1px solid #ccc;
       border-radius: 4px;
       font-size: 14px;
+      box-sizing: border-box;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    }
+
+    input[type="email"]:focus,
+    input[type="password"]:focus,
+    input[type="text"]:focus {
+      outline: none;
+      border-color: #0078d4;
+      box-shadow: 0 0 0 2px rgba(0, 120, 212, 0.1);
     }
 
     button {
@@ -52,6 +72,7 @@
       border-radius: 4px;
       cursor: pointer;
       transition: background 0.2s;
+      box-sizing: border-box;
     }
 
     button:hover {
@@ -88,16 +109,29 @@
 <body>
 
   <div class="login-container">
-    <h1>Sign In</h1>
+    <div class="brand-header">Tendersmith</div>
+    <h1 id="formTitle">Sign In</h1>
+    
+    <!-- Sign In Form -->
     <form id="loginForm">
       <input type="email" id="email" placeholder="Email" required>
       <input type="password" id="password" placeholder="Password" required>
       <button type="submit" id="submitBtn">Sign In</button>
     </form>
+
+    <!-- Request Access Form (hidden by default) -->
+    <form id="requestAccessForm" style="display: none;">
+      <input type="text" id="fullName" placeholder="Full Name" required>
+      <input type="text" id="company" placeholder="Company Name" required>
+      <input type="email" id="requestEmail" placeholder="Email" required>
+      <button type="submit" id="requestBtn">Request Access</button>
+    </form>
+
     <div id="error" class="error"></div>
+    <div id="success" style="color: green; font-size: 13px; margin-top: 10px;"></div>
 
     <div class="footer">
-      Don’t have an account? <a href="#">Request access</a>
+      <span id="toggleText">Don't have an account?</span> <a href="#" id="toggleLink">Request access</a>
     </div>
   </div>
 
@@ -106,6 +140,90 @@
       ? "http://localhost:4000"
       : window.location.origin;
 
+    // Toggle between Sign In and Request Access forms
+    const toggleLink = document.getElementById("toggleLink");
+    const toggleText = document.getElementById("toggleText");
+    const formTitle = document.getElementById("formTitle");
+    const loginForm = document.getElementById("loginForm");
+    const requestAccessForm = document.getElementById("requestAccessForm");
+    const errorDiv = document.getElementById("error");
+    const successDiv = document.getElementById("success");
+
+    let isRequestMode = false;
+
+    toggleLink.addEventListener("click", (e) => {
+      e.preventDefault();
+      errorDiv.textContent = "";
+      successDiv.textContent = "";
+      
+      isRequestMode = !isRequestMode;
+      
+      if (isRequestMode) {
+        // Switch to Request Access mode
+        formTitle.textContent = "Request Access";
+        loginForm.style.display = "none";
+        requestAccessForm.style.display = "block";
+        toggleText.textContent = "Already have an account?";
+        toggleLink.textContent = "Sign in";
+      } else {
+        // Switch back to Sign In mode
+        formTitle.textContent = "Sign In";
+        loginForm.style.display = "block";
+        requestAccessForm.style.display = "none";
+        toggleText.textContent = "Don't have an account?";
+        toggleLink.textContent = "Request access";
+      }
+    });
+
+    // Request Access Form Handler
+    requestAccessForm.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const fullName = document.getElementById("fullName").value.trim();
+      const company = document.getElementById("company").value.trim();
+      const requestEmail = document.getElementById("requestEmail").value.trim();
+      const requestBtn = document.getElementById("requestBtn");
+      
+      errorDiv.textContent = "";
+      successDiv.textContent = "";
+      requestBtn.disabled = true;
+      requestBtn.textContent = "Sending...";
+
+      try {
+        const res = await fetch(`${apiBase}/request-access`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ fullName, company, email: requestEmail }),
+        });
+
+        if (!res.ok) {
+          let errorMessage = "Request failed.";
+          try {
+            const data = await res.json();
+            errorMessage = data.error || errorMessage;
+          } catch (e) {
+            // If response isn't JSON, use status text
+            errorMessage = res.statusText || errorMessage;
+          }
+          errorDiv.textContent = errorMessage;
+          requestBtn.disabled = false;
+          requestBtn.textContent = "Request Access";
+          return;
+        }
+
+        const data = await res.json();
+        successDiv.textContent = "Account request successful! You will receive an email inviting you to create an account shortly.";
+        requestAccessForm.reset();
+        requestBtn.disabled = false;
+        requestBtn.textContent = "Request Access";
+      } catch (err) {
+        console.error("Request error:", err);
+        errorDiv.textContent = "An error occurred. Please try again.";
+        requestBtn.disabled = false;
+        requestBtn.textContent = "Request Access";
+      }
+    });
+
+    // Sign In Form Handler
     document.getElementById("loginForm").addEventListener("submit", async (e) => {
       e.preventDefault();
       const email = document.getElementById("email").value.trim();
