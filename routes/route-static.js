@@ -34,6 +34,11 @@ module.exports = () => {
     res.sendFile(path.join(__dirname, "..", "client", "invite.html"));
   });
 
+  // ---- Serve password reset page ----
+  router.get("/reset-password/:token", (req, res) => {
+    res.sendFile(path.join(__dirname, "..", "client", "reset-password.html"));
+  });
+
   // ---- Serve start (login) page ----
   router.get("/start.html", (req, res) => {
     res.sendFile(path.join(__dirname, "..", "client", "start.html"));

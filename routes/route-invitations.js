@@ -244,5 +244,140 @@ module.exports = (pool) => {
     }
   });
 
+  // === Forgot Password (sends reset link) ===
+  router.post("/forgot-password", async (req, res) => {
+    try {
+      const { email } = req.body;
+
+      if (!email) {
+        return res.status(400).json({ error: "Email is required" });
+      }
+
+      // Check if user exists
+      const userResult = await pool.query(
+        "SELECT id, first_name FROM users WHERE email = $1",
+        [email]
+      );
+
+      if (userResult.rows.length === 0) {
+        // Don't reveal if email exists or not for security
+        return res.json({ message: "If that email exists, a reset link has been sent." });
+      }
+
+      const user = userResult.rows[0];
+
+      // Generate reset token
+      const resetToken = crypto.randomBytes(32).toString("hex");
+      const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+
+      // Store reset token in password_resets table
+      await pool.query(
+        `INSERT INTO password_resets (email, token, expires_at)
+         VALUES ($1, $2, $3)`,
+        [email, resetToken, expiresAt]
+      );
+
+      // Send reset email
+      const appUrl = process.env.APP_URL || 
+                     process.env.RENDER_EXTERNAL_URL || 
+                     "http://localhost:4000";
+      const resetLink = `${appUrl}/reset-password/${resetToken}`;
+
+      try {
+        const transporter = nodemailer.createTransport({
+          service: "gmail",
+          auth: {
+            user: process.env.EMAIL_USER,
+            pass: process.env.EMAIL_PASS,
+          },
+        });
+
+        await transporter.sendMail({
+          from: process.env.EMAIL_USER,
+          to: email,
+          subject: "Reset Your Tendersmith Password",
+          html: `
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+              <h2 style="color: #0078d4;">Password Reset Request</h2>
+              <p>Hi ${user.first_name || 'there'},</p>
+              <p>We received a request to reset your password for your Tendersmith account.</p>
+              <p style="margin: 30px 0;">
+                <a href="${resetLink}" style="background: #0078d4; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; display: inline-block;">
+                  Reset Password
+                </a>
+              </p>
+              <p style="color: #666; font-size: 14px;">
+                This link will expire in 1 hour.
+              </p>
+              <p style="color: #666; font-size: 14px;">
+                If you didn't request this password reset, you can safely ignore this email.
+              </p>
+            </div>
+          `,
+        });
+
+        res.json({ message: "If that email exists, a reset link has been sent." });
+      } catch (emailErr) {
+        console.error("Error sending reset email:", emailErr);
+        res.status(500).json({ error: "Failed to send reset email" });
+      }
+    } catch (err) {
+      console.error("Error processing password reset:", err);
+      res.status(500).json({ error: "Failed to process request" });
+    }
+  });
+
+  // === Reset Password ===
+  router.post("/reset-password", async (req, res) => {
+    try {
+      const { token, password } = req.body;
+
+      if (!token || !password) {
+        return res.status(400).json({ error: "Token and password are required" });
+      }
+
+      if (password.length < 6) {
+        return res.status(400).json({ error: "Password must be at least 6 characters" });
+      }
+
+      // Find reset token
+      const resetResult = await pool.query(
+        "SELECT * FROM password_resets WHERE token = $1 AND used = false",
+        [token]
+      );
+
+      if (resetResult.rows.length === 0) {
+        return res.status(404).json({ error: "Invalid or expired reset link" });
+      }
+
+      const resetRecord = resetResult.rows[0];
+
+      // Check expiration
+      if (new Date(resetRecord.expires_at) < new Date()) {
+        return res.status(400).json({ error: "This reset link has expired" });
+      }
+
+      // Hash new password
+      const password_hash = await bcrypt.hash(password, 10);
+
+      // Update user password
+      await pool.query(
+        "UPDATE users SET password_hash = $1 WHERE email = $2",
+        [password_hash, resetRecord.email]
+      );
+
+      // Mark reset token as used
+      await pool.query(
+        "UPDATE password_resets SET used = true WHERE id = $1",
+        [resetRecord.id]
+      );
+
+      res.json({ message: "Password reset successfully" });
+    } catch (err) {
+      console.error("Error resetting password:", err);
+      res.status(500).json({ error: "Failed to reset password" });
+    }
+  });
+
   return router;
 };

@@ -113,6 +113,18 @@ async function runMigrations() {
       );
     `);
 
+    // === PASSWORD RESETS ===
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS password_resets (
+        id SERIAL PRIMARY KEY,
+        email TEXT NOT NULL,
+        token TEXT UNIQUE NOT NULL,
+        expires_at TIMESTAMP NOT NULL,
+        used BOOLEAN DEFAULT FALSE,
+        created_at TIMESTAMP DEFAULT NOW()
+      );
+    `);
+
     // === LOTS ===
     await pool.query(`
       CREATE TABLE IF NOT EXISTS lots (
