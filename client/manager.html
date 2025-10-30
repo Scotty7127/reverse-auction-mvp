@@ -38,7 +38,7 @@
     <section class="dashboard">
       <div class="page-header text-center mb-4">
         <h1>Manager Dashboard</h1>
-        <h2 id="welcome" class="welcome-text">Welcome!</h2>
+        <h2 id="welcome" class="welcome-text">Welcome</h2>
       </div>
 
       <div class="dashboard-grid">
@@ -77,7 +77,7 @@
               <span class="btn-icon">+</span> Create Event
             </button>
             <button class="btn-action-secondary" onclick="window.location.href='account.html'">
-              <span class="btn-icon">👤</span> Invite User
+              Invite New User
             </button>
           </div>
         </div>
@@ -99,7 +99,7 @@
   <script>
     const user = JSON.parse(localStorage.getItem("user"));
     if (user && (user.first_name || user.last_name)) {
-      document.getElementById("welcome").textContent = `Welcome, ${user.first_name || ""} ${user.last_name || ""}`.trim() + "!";
+      document.getElementById("welcome").textContent = `Welcome, ${user.first_name || ""} ${user.last_name || ""}`.trim();
     }
   </script>
   <script>
