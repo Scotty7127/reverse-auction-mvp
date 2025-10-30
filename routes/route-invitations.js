@@ -81,6 +81,11 @@ module.exports = (pool) => {
                      (process.env.RENDER_EXTERNAL_URL || "http://localhost:4000");
       const inviteLink = `${appUrl}/invite/${token}`;
       
+      console.log("📧 Sending invite with APP_URL:", process.env.APP_URL);
+      console.log("📧 RENDER_EXTERNAL_URL:", process.env.RENDER_EXTERNAL_URL);
+      console.log("📧 Using appUrl:", appUrl);
+      console.log("📧 Final invite link:", inviteLink);
+      
       try {
         const transporter = nodemailer.createTransport({
           service: "gmail",
@@ -378,6 +383,36 @@ module.exports = (pool) => {
     } catch (err) {
       console.error("Error resetting password:", err);
       res.status(500).json({ error: "Failed to reset password" });
+    }
+  });
+
+  // === Get Pending Invitations ===
+  router.get("/invitations/pending", ensureAuthenticated, async (req, res) => {
+    try {
+      const result = await pool.query(
+        `SELECT id, email, role, expires_at, created_at 
+         FROM invitations 
+         WHERE accepted = false 
+         ORDER BY created_at DESC`
+      );
+      res.json(result.rows);
+    } catch (err) {
+      console.error("Error fetching invitations:", err);
+      res.status(500).json({ error: "Failed to fetch invitations" });
+    }
+  });
+
+  // === Delete Invitation ===
+  router.delete("/invitations/:id", ensureAuthenticated, async (req, res) => {
+    try {
+      const { id } = req.params;
+      
+      await pool.query("DELETE FROM invitations WHERE id = $1", [id]);
+      
+      res.json({ message: "Invitation deleted successfully" });
+    } catch (err) {
+      console.error("Error deleting invitation:", err);
+      res.status(500).json({ error: "Failed to delete invitation" });
     }
   });
 

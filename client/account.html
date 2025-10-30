@@ -89,6 +89,18 @@
         </div>
       </section>
     </div>
+
+    <!-- Pending Invitations Section -->
+    <section class="invite-card" style="margin-top: 24px;">
+      <div class="card-header-custom">
+        <h3 class="card-title">Pending Invitations</h3>
+      </div>
+      <div class="card-content">
+        <div id="pendingInvitesList">
+          <p style="color: #666; font-size: 14px; text-align: center;">Loading...</p>
+        </div>
+      </div>
+    </section>
   </main>
 <script>
   document.getElementById("inviteForm").addEventListener("submit", async (e) => {
@@ -153,6 +165,75 @@ document.getElementById("logoutBtn").addEventListener("click", () => {
 document.getElementById("editAccountBtn").addEventListener("click", () => {
   alert("Edit account functionality coming soon!");
 });
+
+// Load pending invitations
+async function loadPendingInvites() {
+  const listEl = document.getElementById("pendingInvitesList");
+  try {
+    const res = await authFetch("/invitations/pending");
+    if (!res.ok) throw new Error("Failed to load invitations");
+    
+    const invites = await res.json();
+    
+    if (invites.length === 0) {
+      listEl.innerHTML = '<p style="color: #666; font-size: 14px; text-align: center;">No pending invitations</p>';
+      return;
+    }
+    
+    listEl.innerHTML = invites.map(invite => {
+      const expiresAt = new Date(invite.expires_at);
+      const isExpired = expiresAt < new Date();
+      const daysLeft = Math.ceil((expiresAt - new Date()) / (1000 * 60 * 60 * 24));
+      
+      return `
+        <div style="display: flex; justify-content: space-between; align-items: center; padding: 12px; border: 1px solid #e5e7eb; border-radius: 6px; margin-bottom: 8px; background: ${isExpired ? '#fef2f2' : '#f9fafb'};">
+          <div style="flex: 1;">
+            <div style="font-weight: 500; color: #1f2937;">${invite.email}</div>
+            <div style="font-size: 13px; color: #6b7280; margin-top: 2px;">
+              Role: ${invite.role} • 
+              ${isExpired ? '<span style="color: #dc2626;">Expired</span>' : `Expires in ${daysLeft} day${daysLeft !== 1 ? 's' : ''}`}
+            </div>
+          </div>
+          <button 
+            onclick="deleteInvitation(${invite.id}, '${invite.email}')" 
+            style="background: #dc2626; color: white; border: none; padding: 6px 12px; border-radius: 4px; font-size: 13px; cursor: pointer; transition: background 0.2s;"
+            onmouseover="this.style.background='#b91c1c'" 
+            onmouseout="this.style.background='#dc2626'">
+            Delete
+          </button>
+        </div>
+      `;
+    }).join('');
+  } catch (err) {
+    console.error("Error loading invitations:", err);
+    listEl.innerHTML = '<p style="color: #dc2626; font-size: 14px; text-align: center;">Failed to load invitations</p>';
+  }
+}
+
+// Delete invitation
+async function deleteInvitation(id, email) {
+  if (!confirm(`Delete invitation for ${email}?`)) return;
+  
+  try {
+    const res = await authFetch(`/invitations/${id}`, { method: 'DELETE' });
+    if (!res.ok) throw new Error("Failed to delete");
+    
+    loadPendingInvites(); // Reload list
+    document.getElementById("inviteMessage").textContent = "";
+    document.getElementById("inviteMessage").style.color = "green";
+    document.getElementById("inviteMessage").textContent = "✅ Invitation deleted";
+    setTimeout(() => {
+      document.getElementById("inviteMessage").textContent = "";
+    }, 3000);
+  } catch (err) {
+    console.error("Error deleting invitation:", err);
+    alert("Failed to delete invitation");
+  }
+}
+
+// Load invitations on page load
+loadPendingInvites();
+
 </script>
 <!-- Socket.IO client -->
 <script src="/socket.io/socket.io.js"></script>
