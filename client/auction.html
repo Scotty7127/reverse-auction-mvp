@@ -1529,7 +1529,7 @@
       const debugStartNowBtn = document.getElementById('debug-start-now-btn');
       if (debugStartNowBtn) {
         debugStartNowBtn.addEventListener('click', async () => {
-          if (!confirm('DEBUG: Reset auction and start now? This will delete all bids and reset the graph.')) return;
+          if (!confirm('DEBUG: Reset auction and start now? This will revert bids to opening.')) return;
           
           try {
             const res = await authFetch(`/events/${eventId}/debug-reset`, {
