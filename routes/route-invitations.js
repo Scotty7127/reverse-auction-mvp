@@ -46,10 +46,10 @@ module.exports = (pool) => {
             error: "An active invitation already exists for this email address" 
           });
         }
-        // Delete expired invitation
+        // Delete expired or any existing invitation for this email
         await pool.query(
-          "DELETE FROM invitations WHERE id = $1",
-          [existingInvite.rows[0].id]
+          "DELETE FROM invitations WHERE email = $1",
+          [email]
         );
       }
 
@@ -65,10 +65,12 @@ module.exports = (pool) => {
       const token = crypto.randomBytes(32).toString("hex");
       const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
 
-      // Store invitation
+      // Store invitation (use ON CONFLICT to handle any edge cases)
       await pool.query(
         `INSERT INTO invitations (email, role, token, expires_at, organisation_id)
-         VALUES ($1, $2, $3, $4, $5)`,
+         VALUES ($1, $2, $3, $4, $5)
+         ON CONFLICT (email) DO UPDATE 
+         SET role = $2, token = $3, expires_at = $4, organisation_id = $5, accepted = false`,
         [email, role, token, expiresAt, organisation_id]
       );
 
