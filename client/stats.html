@@ -7,6 +7,7 @@
   <!-- Bootstrap CSS -->
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
   <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="css/stats.css">
   <script>
     window.requiredRoles = ["manager"];
   </script>
@@ -28,9 +29,163 @@
       </ul>
     </div>
   </nav>
-  <main>
-    <h2>Statistics</h2>
-    <p>View real-time insights, performance charts, and event analytics here.</p>
+  <main class="stats-page">
+    <div class="stats-header">
+      <h2>Savings Statistics</h2>
+      <p>Track total savings across organizations and categories</p>
+    </div>
+
+    <!-- Organizations List View -->
+    <div id="org-list-view">
+      <div class="stats-card">
+        <div class="stats-card-header">
+          <h5>Client Organizations</h5>
+          <div class="stats-controls">
+            <input type="text" id="org-search" class="stats-search" placeholder="Search organizations...">
+            <select id="org-sort" class="stats-sort">
+              <option value="name-asc">Name (A-Z)</option>
+              <option value="name-desc">Name (Z-A)</option>
+              <option value="savings-desc">Savings (High to Low)</option>
+              <option value="savings-asc">Savings (Low to High)</option>
+              <option value="events-desc">Events (Most to Least)</option>
+              <option value="events-asc">Events (Least to Most)</option>
+            </select>
+          </div>
+        </div>
+        <div class="stats-card-body">
+          <div id="org-list-loading" class="stats-loading">
+            <div class="spinner-border text-primary" role="status">
+              <span class="visually-hidden">Loading...</span>
+            </div>
+          </div>
+          <div id="org-list-content" style="display: none;">
+            <table class="stats-table">
+              <thead>
+                <tr>
+                  <th>Organization</th>
+                  <th style="text-align: right;">Total Events</th>
+                  <th style="text-align: right;">Total Savings</th>
+                  <th style="text-align: center;">Actions</th>
+                </tr>
+              </thead>
+              <tbody id="org-table-body">
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Organization Detail View -->
+    <div id="org-detail-view" style="display: none;">
+      <button class="btn-back" onclick="backToOrgList()">
+        ← Back to Organizations
+      </button>
+      
+      <div class="stats-card mb-4">
+        <div class="stats-card-header">
+          <h5 id="org-detail-name">Organization Details</h5>
+        </div>
+        <div class="stats-card-body">
+          <div class="metrics-grid">
+            <div class="metric-card">
+              <h3 class="metric-value success" id="org-total-savings">$0.00</h3>
+              <p class="metric-label">Total Savings</p>
+            </div>
+            <div class="metric-card">
+              <h3 class="metric-value" id="org-total-events">0</h3>
+              <p class="metric-label">Total Events</p>
+            </div>
+            <div class="metric-card">
+              <h3 class="metric-value" id="org-total-categories">0</h3>
+              <p class="metric-label">Categories</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="stats-card">
+        <div class="stats-card-header">
+          <h5>Savings by Category</h5>
+        </div>
+        <div class="stats-card-body">
+          <div id="category-list-loading" class="stats-loading">
+            <div class="spinner-border text-primary" role="status">
+              <span class="visually-hidden">Loading...</span>
+            </div>
+          </div>
+          <div id="category-list-content" style="display: none;">
+            <table class="stats-table">
+              <thead>
+                <tr>
+                  <th>Category</th>
+                  <th style="text-align: right;">Events</th>
+                  <th style="text-align: right;">Total Savings</th>
+                  <th style="text-align: center;">Actions</th>
+                </tr>
+              </thead>
+              <tbody id="category-table-body">
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Category Detail View -->
+    <div id="category-detail-view" style="display: none;">
+      <button class="btn-back" onclick="backToOrgDetail()">
+        ← Back to Organization
+      </button>
+      
+      <div class="stats-card mb-4">
+        <div class="stats-card-header">
+          <h5>
+            <span id="category-detail-org">Organization</span> - <span id="category-detail-name">Category</span>
+          </h5>
+        </div>
+        <div class="stats-card-body">
+          <div class="metrics-grid">
+            <div class="metric-card">
+              <h3 class="metric-value success" id="category-total-savings">$0.00</h3>
+              <p class="metric-label">Category Savings</p>
+            </div>
+            <div class="metric-card">
+              <h3 class="metric-value" id="category-total-events">0</h3>
+              <p class="metric-label">Past Auctions</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="stats-card">
+        <div class="stats-card-header">
+          <h5>Past Auctions</h5>
+        </div>
+        <div class="stats-card-body">
+          <div id="events-list-loading" class="stats-loading">
+            <div class="spinner-border text-primary" role="status">
+              <span class="visually-hidden">Loading...</span>
+            </div>
+          </div>
+          <div id="events-list-content" style="display: none;">
+            <table class="stats-table">
+              <thead>
+                <tr>
+                  <th>Auction Date</th>
+                  <th style="text-align: right;">Starting Price</th>
+                  <th style="text-align: right;">Winning Bid</th>
+                  <th style="text-align: right;">Savings</th>
+                  <th style="text-align: center;">Actions</th>
+                </tr>
+              </thead>
+              <tbody id="events-table-body">
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
   </main>
   <!-- Bootstrap JS (for optional interactivity) -->
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
@@ -38,5 +193,220 @@
   <script src="/socket.io/socket.io.js"></script>
   <!-- Enable messaging script -->
   <script src="/messages.js"></script>
+
+  <script>
+    // State management
+    let allOrgs = [];
+    let currentOrg = null;
+    let currentCategory = null;
+
+    // Currency symbol mapping
+    const currencySymbols = {
+      'USD': '$',
+      'EUR': '€',
+      'GBP': '£',
+      'JPY': '¥',
+      'AUD': 'A$',
+      'CAD': 'C$',
+      'CHF': 'CHF',
+      'CNY': '¥',
+      'INR': '₹',
+      'NZD': 'NZ$',
+      'ZAR': 'R'
+    };
+
+    // Format currency with proper symbol
+    function formatCurrency(amount, currency = 'USD') {
+      const symbol = currencySymbols[currency] || currency || '$';
+      return new Intl.NumberFormat('en-US', {
+        style: 'currency',
+        currency: currency || 'USD',
+        minimumFractionDigits: 2
+      }).format(amount || 0);
+    }
+
+    // Format date
+    function formatDate(dateString) {
+      return new Date(dateString).toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric'
+      });
+    }
+
+    // Load all organizations with savings data
+    async function loadOrganizations() {
+      try {
+        const res = await authFetch('/stats/organizations');
+        allOrgs = await res.json();
+        renderOrganizations();
+      } catch (err) {
+        console.error('Failed to load organizations:', err);
+        document.getElementById('org-list-loading').innerHTML = 
+          '<p class="text-danger">Failed to load organizations.</p>';
+      }
+    }
+
+    // Render organizations with search and sort
+    function renderOrganizations() {
+      const searchTerm = document.getElementById('org-search').value.toLowerCase();
+      const sortBy = document.getElementById('org-sort').value;
+
+      // Filter
+      let filtered = allOrgs.filter(org => 
+        org.name.toLowerCase().includes(searchTerm)
+      );
+
+      // Sort
+      filtered.sort((a, b) => {
+        switch(sortBy) {
+          case 'name-asc': return a.name.localeCompare(b.name);
+          case 'name-desc': return b.name.localeCompare(a.name);
+          case 'savings-desc': return (b.total_savings || 0) - (a.total_savings || 0);
+          case 'savings-asc': return (a.total_savings || 0) - (b.total_savings || 0);
+          case 'events-desc': return (b.event_count || 0) - (a.event_count || 0);
+          case 'events-asc': return (a.event_count || 0) - (b.event_count || 0);
+          default: return 0;
+        }
+      });
+
+      // Render
+      const tbody = document.getElementById('org-table-body');
+      tbody.innerHTML = filtered.map(org => `
+        <tr onclick="viewOrgDetail(${org.id})">
+          <td><strong>${org.name}</strong></td>
+          <td style="text-align: right;">${org.event_count || 0}</td>
+          <td style="text-align: right;"><strong class="text-success">${formatCurrency(org.total_savings, org.currency)}</strong></td>
+          <td style="text-align: center;">
+            <button class="btn-stats btn-stats-primary" onclick="event.stopPropagation(); viewOrgDetail(${org.id})">
+              View Details
+            </button>
+          </td>
+        </tr>
+      `).join('');
+
+      document.getElementById('org-list-loading').style.display = 'none';
+      document.getElementById('org-list-content').style.display = 'block';
+    }
+
+    // View organization detail
+    async function viewOrgDetail(orgId) {
+      currentOrg = allOrgs.find(o => o.id === orgId);
+      if (!currentOrg) return;
+
+      // Show detail view
+      document.getElementById('org-list-view').style.display = 'none';
+      document.getElementById('org-detail-view').style.display = 'block';
+      document.getElementById('category-detail-view').style.display = 'none';
+
+      // Update header
+      document.getElementById('org-detail-name').textContent = currentOrg.name;
+      document.getElementById('org-total-savings').textContent = formatCurrency(currentOrg.total_savings, currentOrg.currency);
+      document.getElementById('org-total-events').textContent = currentOrg.event_count || 0;
+
+      // Load categories
+      try {
+        const res = await authFetch(`/stats/organizations/${orgId}/categories`);
+        const categories = await res.json();
+        
+        document.getElementById('org-total-categories').textContent = categories.length;
+        
+        const tbody = document.getElementById('category-table-body');
+        tbody.innerHTML = categories.map(cat => `
+          <tr onclick="viewCategoryDetail(${orgId}, ${cat.category_id}, '${cat.category_name}')">
+            <td><strong>${cat.category_name}</strong></td>
+            <td style="text-align: right;">${cat.event_count || 0}</td>
+            <td style="text-align: right;"><strong class="text-success">${formatCurrency(cat.total_savings, currentOrg.currency)}</strong></td>
+            <td style="text-align: center;">
+              <button class="btn-stats btn-stats-primary" onclick="event.stopPropagation(); viewCategoryDetail(${orgId}, ${cat.category_id}, '${cat.category_name}')">
+                View Auctions
+              </button>
+            </td>
+          </tr>
+        `).join('');
+
+        document.getElementById('category-list-loading').style.display = 'none';
+        document.getElementById('category-list-content').style.display = 'block';
+      } catch (err) {
+        console.error('Failed to load categories:', err);
+        document.getElementById('category-list-loading').innerHTML = 
+          '<p class="text-danger">Failed to load categories.</p>';
+      }
+    }
+
+    // View category detail
+    async function viewCategoryDetail(orgId, categoryId, categoryName) {
+      currentCategory = { orgId, categoryId, categoryName };
+
+      // Show category view
+      document.getElementById('org-list-view').style.display = 'none';
+      document.getElementById('org-detail-view').style.display = 'none';
+      document.getElementById('category-detail-view').style.display = 'block';
+
+      // Update header
+      document.getElementById('category-detail-org').textContent = currentOrg.name;
+      document.getElementById('category-detail-name').textContent = categoryName;
+
+      // Load events
+      try {
+        const res = await authFetch(`/stats/organizations/${orgId}/categories/${categoryId}/events`);
+        const events = await res.json();
+
+        const totalSavings = events.reduce((sum, evt) => sum + (evt.savings || 0), 0);
+        document.getElementById('category-total-savings').textContent = formatCurrency(totalSavings, currentOrg.currency);
+        document.getElementById('category-total-events').textContent = events.length;
+
+        const tbody = document.getElementById('events-table-body');
+        tbody.innerHTML = events.map(evt => `
+          <tr>
+            <td>${formatDate(evt.auction_time)}</td>
+            <td style="text-align: right;">${formatCurrency(evt.starting_price, currentOrg.currency)}</td>
+            <td style="text-align: right;">${formatCurrency(evt.winning_bid, currentOrg.currency)}</td>
+            <td style="text-align: right;"><strong class="text-success">${formatCurrency(evt.savings, currentOrg.currency)}</strong></td>
+            <td style="text-align: center;">
+              <button class="btn-stats btn-stats-outline" onclick="window.location.href='event.html?id=${evt.id}'">
+                View Event
+              </button>
+            </td>
+          </tr>
+        `).join('');
+
+        document.getElementById('events-list-loading').style.display = 'none';
+        document.getElementById('events-list-content').style.display = 'block';
+      } catch (err) {
+        console.error('Failed to load events:', err);
+        document.getElementById('events-list-loading').innerHTML = 
+          '<p class="text-danger">Failed to load events.</p>';
+      }
+    }
+
+    // Navigation
+    function backToOrgList() {
+      document.getElementById('org-list-view').style.display = 'block';
+      document.getElementById('org-detail-view').style.display = 'none';
+      document.getElementById('category-detail-view').style.display = 'none';
+      currentOrg = null;
+      currentCategory = null;
+    }
+
+    function backToOrgDetail() {
+      document.getElementById('org-list-view').style.display = 'none';
+      document.getElementById('org-detail-view').style.display = 'block';
+      document.getElementById('category-detail-view').style.display = 'none';
+      
+      // Reset loading states
+      document.getElementById('events-list-loading').style.display = 'block';
+      document.getElementById('events-list-content').style.display = 'none';
+      
+      currentCategory = null;
+    }
+
+    // Event listeners
+    document.getElementById('org-search').addEventListener('input', renderOrganizations);
+    document.getElementById('org-sort').addEventListener('change', renderOrganizations);
+
+    // Initialize
+    loadOrganizations();
+  </script>
 </body>
 </html>

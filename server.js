@@ -72,6 +72,9 @@ app.use("/", userRoutes);
 const invitationRoutes = require("./routes/route-invitations")(pool);
 app.use("/", invitationRoutes);
 
+const statsRoutes = require("./routes/route-stats")(pool);
+app.use("/", statsRoutes);
+
 const staticRoutes = require("./routes/route-static")();
 app.use("/", staticRoutes);
 
