@@ -36,13 +36,32 @@
     </div>
 
     <!-- Auction Info (shown when auction is active) -->
-    <div id="auction-info">
-      <p><strong>Currency:</strong> <span id="auction-currency">Loading...</span></p>
-      <p><strong>Starts:</strong> <span id="auction-start-time">Loading...</span></p>
-      <p><strong>Time left:</strong> <span id="auction-countdown">00:00:00</span></p>
-      <p><strong>Status:</strong> <span id="auction-status">Loading...</span></p>
+    <div id="auction-info" style="display: flex; margin-bottom: 24px; border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden; background: #fff;">
+      <div style="flex: 1; padding: 12px 16px; border-right: 1px solid #e2e8f0;">
+        <span style="font-weight: 600; color: #64748b;">Start Date:</span> <span id="auction-start-date" style="color: #1e293b;">Loading...</span>
+      </div>
+      <div style="flex: 1; padding: 12px 16px; border-right: 1px solid #e2e8f0;">
+        <span style="font-weight: 600; color: #64748b;">Start Time:</span> <span id="auction-start-time" style="color: #1e293b;">Loading...</span>
+      </div>
+      <div style="flex: 1; padding: 12px 16px; border-right: 1px solid #e2e8f0;">
+        <span style="font-weight: 600; color: #64748b;">Time Left:</span> <span id="auction-countdown" style="color: #1e293b;">00:00:00</span>
+      </div>
+      <div style="flex: 1; padding: 12px 16px; border-right: 1px solid #e2e8f0;">
+        <span style="font-weight: 600; color: #64748b;">Currency:</span> <span id="auction-currency" style="color: #1e293b;">Loading...</span>
+      </div>
+      <div style="flex: 1; padding: 12px 16px;">
+        <span style="font-weight: 600; color: #64748b;">Status:</span> <span id="auction-status" style="font-weight: 700;">Loading...</span>
+      </div>
     </div>
-    <hr />
+    <style>
+      @keyframes pulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.7; }
+      }
+      #auction-status.status-pulse {
+        animation: pulse 2s ease-in-out infinite;
+      }
+    </style>
 
     <!-- Bidder Line Items -->
     <section id="bidder-lineitems" class="mt-4">
@@ -87,6 +106,13 @@
     let auctionHasStarted = false;
     let previousBids = {}; // Track previous bid values by line_item_id
     let isPaused = false; // Track if auction is paused
+    let currencySymbol = '£'; // Default currency symbol
+    const currencySymbols = { GBP:'£', USD:'$', EUR:'€', CAD:'$', AUD:'$', NZD:'$', CHF:'CHF', JPY:'¥', CNY:'¥', INR:'₹', SEK:'kr', NOK:'kr', DKK:'kr', PLN:'zł', ZAR:'R' };
+
+    // Format money with currency symbol
+    function fmtMoney(n, symbol){
+      try { return `${symbol}${Number(n).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`; } catch { return `${symbol}${n}`; }
+    }
 
     // === Show pre-auction state ===
     function showPreAuctionState() {
@@ -98,7 +124,7 @@
     // === Show auction active state ===
     function showAuctionActive() {
       document.getElementById("pre-auction-message").style.display = "none";
-      document.getElementById("auction-info").style.display = "block";
+      document.getElementById("auction-info").style.display = "flex";
       document.getElementById("grey-overlay").style.display = "none";
       
       // Enable all bid inputs
@@ -162,9 +188,28 @@
         const eventName = stats.title || 'Unnamed Event';
         document.getElementById("event-title").textContent = `${orgName} - ${catName} - ${eventName}`;
 
+        const currencyCode = (stats.currency || 'GBP').toUpperCase();
+        currencySymbol = currencySymbols[currencyCode] || currencyCode || '£';
         document.getElementById("auction-currency").textContent = stats.currency || "Not set";
-        document.getElementById("auction-start-time").textContent = auctionStartTime ? auctionStartTime.toLocaleString() : "Not set";
-        document.getElementById("auction-status").textContent = isPaused ? "Paused" : "Active";
+
+        if (auctionStartTime) {
+          document.getElementById("auction-start-date").textContent = auctionStartTime.toLocaleDateString();
+          document.getElementById("auction-start-time").textContent = auctionStartTime.toLocaleTimeString();
+        } else {
+          document.getElementById("auction-start-date").textContent = "Not set";
+          document.getElementById("auction-start-time").textContent = "Not set";
+        }
+
+        const statusEl = document.getElementById("auction-status");
+        if (isPaused) {
+          statusEl.textContent = "Paused";
+          statusEl.style.color = "#dc2626"; // Red for paused
+          statusEl.classList.add("status-pulse");
+        } else {
+          statusEl.textContent = "Active";
+          statusEl.style.color = "#059669"; // Green for active
+          statusEl.classList.add("status-pulse");
+        }
 
         // Update submit button and warning based on pause state
         updateSubmitButtonState();
@@ -213,7 +258,7 @@
           if (item.current_bid) {
             previousBids[item.id] = item.current_bid;
           }
-          
+
           return `
           <tr data-lineitem="${item.id}">
             <td>${item.rank || "-"}</td>
@@ -221,16 +266,16 @@
             <td>${item.quantity}</td>
             <td>${item.ext_quantity}</td>
             <td>
-              <input type="number" class="form-control form-control-sm bid-input" 
-                id="bid-${item.id}" min="0" step="0.01" placeholder="Enter bid" 
+              <input type="number" class="form-control form-control-sm bid-input"
+                id="bid-${item.id}" min="0" step="0.01" placeholder="Enter bid"
                 value="${item.current_bid || ''}"
                 ${!auctionHasStarted ? 'disabled' : ''}>
             </td>
-            <td id="extended-${item.id}">${item.current_bid && item.ext_quantity ? 
-                (item.current_bid * item.ext_quantity).toFixed(2) : '-'}</td>
-            <td>${item.current_bid || '-'}</td>
-            <td>${item.current_bid && item.ext_quantity ? 
-                (item.current_bid * item.ext_quantity).toFixed(2) : '-'}</td>
+            <td id="extended-${item.id}">${item.current_bid && item.ext_quantity ?
+                fmtMoney(item.current_bid * item.ext_quantity, currencySymbol) : '-'}</td>
+            <td>${item.current_bid ? fmtMoney(item.current_bid, currencySymbol) : '-'}</td>
+            <td>${item.current_bid && item.ext_quantity ?
+                fmtMoney(item.current_bid * item.ext_quantity, currencySymbol) : '-'}</td>
           </tr>
         `;
         }).join('');
@@ -243,7 +288,7 @@
             const row = items.find(i => i.id == id);
             const val = parseFloat(e.target.value);
             const extendedCell = document.getElementById(`extended-${id}`);
-            extendedCell.textContent = !isNaN(val) ? (val * row.ext_quantity).toFixed(2) : '-';
+            extendedCell.textContent = !isNaN(val) ? fmtMoney(val * row.ext_quantity, currencySymbol) : '-';
           });
         });
       } catch (err) {
@@ -296,25 +341,25 @@
             // Update previousBids with the newly submitted values
             bidPayload.forEach(bid => {
               previousBids[bid.line_item_id] = bid.amount;
-              
+
               // Update the "Current Bid" column
               const row = document.querySelector(`tr[data-lineitem="${bid.line_item_id}"]`);
               if (row) {
-                row.cells[6].textContent = bid.amount.toFixed(2);
-                
+                row.cells[6].textContent = fmtMoney(bid.amount, currencySymbol);
+
                 // Update "Current Extended Bid" column
                 const extQtyCell = row.cells[3];
                 const extQty = parseFloat(extQtyCell.textContent);
                 if (!isNaN(extQty)) {
-                  row.cells[7].textContent = (bid.amount * extQty).toFixed(2);
+                  row.cells[7].textContent = fmtMoney(bid.amount * extQty, currencySymbol);
                 }
-                
+
                 // Clear the "New Bid" input
                 const input = document.getElementById(`bid-${bid.line_item_id}`);
                 if (input) {
                   input.value = '';
                 }
-                
+
                 // Clear the "New Extended Bid" display
                 const extendedCell = document.getElementById(`extended-${bid.line_item_id}`);
                 if (extendedCell) {
@@ -349,7 +394,16 @@
         if (serverPaused !== isPaused) {
           isPaused = serverPaused;
           updateSubmitButtonState();
-          document.getElementById("auction-status").textContent = isPaused ? "Paused" : "Active";
+          const statusEl = document.getElementById("auction-status");
+          if (isPaused) {
+            statusEl.textContent = "Paused";
+            statusEl.style.color = "#dc2626"; // Red for paused
+            statusEl.classList.add("status-pulse");
+          } else {
+            statusEl.textContent = "Active";
+            statusEl.style.color = "#059669"; // Green for active
+            statusEl.classList.add("status-pulse");
+          }
         }
         
         // Update countdown display with server's authoritative time (pass pause state)
