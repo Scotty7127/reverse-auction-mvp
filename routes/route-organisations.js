@@ -13,7 +13,7 @@ module.exports = (pool) => {
     try {
       const orgId = req.params.id;
       const result = await pool.query(
-        `SELECT id, first_name, last_name, email, role 
+        `SELECT id, first_name, last_name, email, role
          FROM users WHERE organisation_id = $1 ORDER BY first_name ASC`,
         [orgId]
       );
@@ -21,6 +21,63 @@ module.exports = (pool) => {
     } catch (err) {
       console.error("Error fetching organisation users:", err);
       res.status(500).json({ error: "Failed to fetch organisation users" });
+    }
+  });
+
+  // --- Add existing user to organisation ---
+  router.patch("/organisations/:id/members/:userId", ensureAuthenticated, async (req, res) => {
+    try {
+      const { id: orgId, userId } = req.params;
+
+      // Check if organisation exists
+      const orgCheck = await pool.query("SELECT id FROM organisations WHERE id = $1", [orgId]);
+      if (orgCheck.rows.length === 0) {
+        return res.status(404).json({ error: "Organisation not found" });
+      }
+
+      // Check if user exists
+      const userCheck = await pool.query("SELECT id, email FROM users WHERE id = $1", [userId]);
+      if (userCheck.rows.length === 0) {
+        return res.status(404).json({ error: "User not found" });
+      }
+
+      // Update user's organisation
+      const result = await pool.query(
+        `UPDATE users SET organisation_id = $1 WHERE id = $2
+         RETURNING id, first_name, last_name, email, role, organisation_id`,
+        [orgId, userId]
+      );
+
+      res.json({
+        message: "User added to organisation successfully",
+        user: result.rows[0]
+      });
+    } catch (err) {
+      console.error("Error adding user to organisation:", err);
+      res.status(500).json({ error: "Failed to add user to organisation" });
+    }
+  });
+
+  // --- Remove user from organisation ---
+  router.delete("/organisations/:id/members/:userId", ensureAuthenticated, async (req, res) => {
+    try {
+      const { id: orgId, userId } = req.params;
+
+      // Update user's organisation to NULL
+      const result = await pool.query(
+        `UPDATE users SET organisation_id = NULL WHERE id = $1 AND organisation_id = $2
+         RETURNING id`,
+        [userId, orgId]
+      );
+
+      if (result.rows.length === 0) {
+        return res.status(404).json({ error: "User not found in this organisation" });
+      }
+
+      res.json({ message: "User removed from organisation successfully" });
+    } catch (err) {
+      console.error("Error removing user from organisation:", err);
+      res.status(500).json({ error: "Failed to remove user from organisation" });
     }
   });
 

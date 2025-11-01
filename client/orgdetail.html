@@ -95,14 +95,18 @@
 
       <div class="card shadow-sm" id="users-section" style="display:none;">
         <div class="card-body">
-          <h2 class="section-title">Users</h2>
-          <button class="btn btn-primary mb-3" id="invite-user-btn">Invite User</button>
+          <h2 class="section-title">Members</h2>
+          <div class="mb-3">
+            <button class="btn btn-primary" id="invite-user-btn">Invite New User</button>
+            <button class="btn btn-secondary" id="add-existing-user-btn">Add Existing User</button>
+          </div>
           <table id="users-table" class="line-items-table">
             <thead>
               <tr>
                 <th>Name</th>
                 <th>Email</th>
                 <th>Role</th>
+                <th>Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -154,16 +158,14 @@
       // Show/hide sections based on org type
       if (org.type === 'client') {
         document.getElementById('categories-section').style.display = 'block';
-        document.getElementById('users-section').style.display = 'none';
         fetchCategories();
-      } else if (org.type === 'supplier') {
-        document.getElementById('categories-section').style.display = 'none';
-        document.getElementById('users-section').style.display = 'block';
-        fetchUsers();
       } else {
         document.getElementById('categories-section').style.display = 'none';
-        document.getElementById('users-section').style.display = 'none';
       }
+
+      // Always show users section for all organization types
+      document.getElementById('users-section').style.display = 'block';
+      fetchUsers();
     }
 
     // Handle create or update
@@ -220,14 +222,38 @@
       const tbody = document.querySelector('#users-table tbody');
       tbody.innerHTML = '';
       if (!users.length) {
-        tbody.innerHTML = '<tr><td colspan="3">No users found.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="4">No users found.</td></tr>';
         return;
       }
       users.forEach(u => {
         const tr = document.createElement('tr');
-        tr.innerHTML = `<td>${u.first_name || ''} ${u.last_name || ''}</td><td>${u.email}</td><td>${u.role}</td>`;
+        tr.innerHTML = `
+          <td>${u.first_name || ''} ${u.last_name || ''}</td>
+          <td>${u.email}</td>
+          <td>${u.role}</td>
+          <td>
+            <button class="btn btn-danger btn-sm" onclick="removeUser(${u.id})">Remove</button>
+          </td>
+        `;
         tbody.appendChild(tr);
       });
+    }
+
+    async function removeUser(userId) {
+      if (!confirm('Are you sure you want to remove this user from the organization?')) return;
+      try {
+        const res = await authFetch(`/organisations/${orgId}/members/${userId}`, {
+          method: 'DELETE'
+        });
+        if (res.ok) {
+          alert('✅ User removed successfully!');
+          fetchUsers();
+        } else {
+          alert('❌ Failed to remove user.');
+        }
+      } catch (err) {
+        alert(`❌ Error: ${err.message}`);
+      }
     }
 
     const inviteBtn = document.getElementById('invite-user-btn');
@@ -244,13 +270,13 @@
     if (inviteForm) {
       inviteForm.addEventListener('submit', async (e) => {
         e.preventDefault();
-        const name = document.getElementById('invite-name')?.value.trim();
         const email = document.getElementById('invite-email')?.value.trim();
+        const role = document.getElementById('invite-role')?.value || 'bidder';
         if (!email) return alert('Enter an email address.');
         const res = await authFetch('/invite', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email, role: 'bidder', organisation_id: orgId })
+          body: JSON.stringify({ email, role, organisation_id: orgId })
         });
         if (res.ok) {
           alert('✅ Invitation sent!');
@@ -259,9 +285,71 @@
             const modal = bootstrap.Modal.getInstance(modalEl);
             if (modal) modal.hide();
           }
+          inviteForm.reset();
           fetchUsers();
         } else {
-          alert('❌ Failed to send invite.');
+          const errorData = await res.json();
+          alert(`❌ ${errorData.error || 'Failed to send invite.'}`);
+        }
+      });
+    }
+
+    // Add Existing User functionality
+    const addExistingUserBtn = document.getElementById('add-existing-user-btn');
+    if (addExistingUserBtn) {
+      addExistingUserBtn.addEventListener('click', async () => {
+        // Fetch available users
+        const res = await authFetch(`/users?excludeOrgId=${orgId}`);
+        if (res.ok) {
+          const users = await res.json();
+          showAddExistingUserModal(users);
+        } else {
+          alert('❌ Failed to load available users.');
+        }
+      });
+    }
+
+    function showAddExistingUserModal(users) {
+      const modalEl = document.getElementById('addExistingUserModal');
+      if (!modalEl || !window.bootstrap) return;
+
+      const select = document.getElementById('existing-user-select');
+      select.innerHTML = '<option value="">Select a user...</option>';
+
+      users.forEach(u => {
+        const option = document.createElement('option');
+        option.value = u.id;
+        option.textContent = `${u.first_name || ''} ${u.last_name || ''} (${u.email})${u.organisation_name ? ' - ' + u.organisation_name : ''}`;
+        select.appendChild(option);
+      });
+
+      const modal = new bootstrap.Modal(modalEl);
+      modal.show();
+    }
+
+    const addExistingUserForm = document.getElementById('add-existing-user-form');
+    if (addExistingUserForm) {
+      addExistingUserForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const userId = document.getElementById('existing-user-select')?.value;
+        if (!userId) return alert('Please select a user.');
+
+        const res = await authFetch(`/organisations/${orgId}/members/${userId}`, {
+          method: 'PATCH'
+        });
+
+        if (res.ok) {
+          alert('✅ User added successfully!');
+          const modalEl = document.getElementById('addExistingUserModal');
+          if (modalEl && window.bootstrap) {
+            const modal = bootstrap.Modal.getInstance(modalEl);
+            if (modal) modal.hide();
+          }
+          addExistingUserForm.reset();
+          fetchUsers();
+        } else {
+          const errorData = await res.json();
+          alert(`❌ ${errorData.error || 'Failed to add user.'}`);
         }
       });
     }
@@ -434,6 +522,7 @@
 
 </script>
 
+  <!-- Invite New User Modal -->
   <div class="modal fade" id="inviteUserModal" tabindex="-1" aria-labelledby="inviteUserModalLabel" aria-hidden="true">
     <div class="modal-dialog">
       <div class="modal-content">
@@ -444,14 +533,40 @@
         <div class="modal-body">
           <form id="invite-user-form">
             <div class="mb-3">
-              <label for="invite-name" class="form-label">Name</label>
-              <input type="text" class="form-control" id="invite-name" required>
-            </div>
-            <div class="mb-3">
               <label for="invite-email" class="form-label">Email</label>
               <input type="email" class="form-control" id="invite-email" required>
             </div>
+            <div class="mb-3">
+              <label for="invite-role" class="form-label">Role</label>
+              <select class="form-control" id="invite-role" required>
+                <option value="bidder">Bidder</option>
+                <option value="manager">Manager</option>
+              </select>
+            </div>
             <button type="submit" class="btn btn-primary">Send Invite</button>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Add Existing User Modal -->
+  <div class="modal fade" id="addExistingUserModal" tabindex="-1" aria-labelledby="addExistingUserModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="addExistingUserModalLabel">Add Existing User</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <form id="add-existing-user-form">
+            <div class="mb-3">
+              <label for="existing-user-select" class="form-label">Select User</label>
+              <select class="form-control" id="existing-user-select" required>
+                <option value="">Select a user...</option>
+              </select>
+            </div>
+            <button type="submit" class="btn btn-primary">Add User</button>
           </form>
         </div>
       </div>

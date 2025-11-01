@@ -11,7 +11,7 @@ module.exports = (pool) => {
   // === Send Invitation ===
   router.post("/invite", ensureAuthenticated, async (req, res) => {
     try {
-      const { email, role } = req.body;
+      const { email, role, organisation_id: customOrgId } = req.body;
       const inviter = req.user;
 
       // Validate input
@@ -42,8 +42,8 @@ module.exports = (pool) => {
       if (existingInvite.rows.length > 0) {
         const expiresAt = new Date(existingInvite.rows[0].expires_at);
         if (expiresAt > new Date()) {
-          return res.status(400).json({ 
-            error: "An active invitation already exists for this email address" 
+          return res.status(400).json({
+            error: "An active invitation already exists for this email address"
           });
         }
         // Delete expired or any existing invitation for this email
@@ -53,13 +53,16 @@ module.exports = (pool) => {
         );
       }
 
-      // Get inviter's organisation
-      const inviterData = await pool.query(
-        "SELECT organisation_id FROM users WHERE id = $1",
-        [inviter.id]
-      );
+      // Get organisation_id: use custom if provided, otherwise use inviter's organisation
+      let organisation_id = customOrgId;
 
-      const organisation_id = inviterData.rows[0]?.organisation_id || null;
+      if (!organisation_id) {
+        const inviterData = await pool.query(
+          "SELECT organisation_id FROM users WHERE id = $1",
+          [inviter.id]
+        );
+        organisation_id = inviterData.rows[0]?.organisation_id || null;
+      }
 
       // Generate unique token
       const token = crypto.randomBytes(32).toString("hex");
