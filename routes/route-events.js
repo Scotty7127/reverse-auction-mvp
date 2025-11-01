@@ -958,16 +958,19 @@ module.exports = (io) => {
           ) AS current_bid,
           (
             SELECT COUNT(*) + 1
-            FROM bids b2
-            WHERE b2.event_id = $1 
-              AND b2.line_item_id = li.id
-              AND b2.amount < COALESCE((
-                SELECT amount 
-                FROM bids 
-                WHERE event_id = $1 
-                  AND user_id = $2 
-                  AND line_item_id = li.id 
-                ORDER BY created_at DESC 
+            FROM (
+              SELECT DISTINCT ON (user_id) user_id, amount
+              FROM bids
+              WHERE event_id = $1 AND line_item_id = li.id
+              ORDER BY user_id, created_at DESC
+            ) AS latest_bids
+            WHERE latest_bids.amount < COALESCE((
+                SELECT amount
+                FROM bids
+                WHERE event_id = $1
+                  AND user_id = $2
+                  AND line_item_id = li.id
+                ORDER BY created_at DESC
                 LIMIT 1
               ), slis.opening_bid, 999999999)
           ) AS rank
@@ -994,19 +997,22 @@ module.exports = (io) => {
       const userId = req.user.id;
 
       const result = await pool.query(`
-        SELECT 
+        SELECT
           (
             SELECT COUNT(*) + 1
-            FROM bids b2
-            WHERE b2.event_id = $1 
-              AND b2.line_item_id = $2
-              AND b2.amount < COALESCE((
-                SELECT amount 
-                FROM bids 
-                WHERE event_id = $1 
-                  AND user_id = $3 
-                  AND line_item_id = $2 
-                ORDER BY created_at DESC 
+            FROM (
+              SELECT DISTINCT ON (user_id) user_id, amount
+              FROM bids
+              WHERE event_id = $1 AND line_item_id = $2
+              ORDER BY user_id, created_at DESC
+            ) AS latest_bids
+            WHERE latest_bids.amount < COALESCE((
+                SELECT amount
+                FROM bids
+                WHERE event_id = $1
+                  AND user_id = $3
+                  AND line_item_id = $2
+                ORDER BY created_at DESC
                 LIMIT 1
               ), (SELECT opening_bid FROM supplier_line_item_settings WHERE event_id = $1 AND line_item_id = $2 AND supplier_id = $3), 999999999)
           ) AS rank
