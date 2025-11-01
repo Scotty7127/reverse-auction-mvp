@@ -266,10 +266,13 @@
             <td>${item.quantity}</td>
             <td>${item.ext_quantity}</td>
             <td>
-              <input type="number" class="form-control form-control-sm bid-input"
-                id="bid-${item.id}" min="0" step="0.01" placeholder="Enter bid"
-                value="${item.current_bid || ''}"
-                ${!auctionHasStarted ? 'disabled' : ''}>
+              <div class="input-group input-group-sm">
+                <span class="input-group-text">${currencySymbol}</span>
+                <input type="number" class="form-control form-control-sm bid-input"
+                  id="bid-${item.id}" min="0" step="0.01" placeholder="Enter bid"
+                  value="${item.current_bid || ''}"
+                  ${!auctionHasStarted ? 'disabled' : ''}>
+              </div>
             </td>
             <td id="extended-${item.id}">${item.current_bid && item.ext_quantity ?
                 fmtMoney(item.current_bid * item.ext_quantity, currencySymbol) : '-'}</td>
