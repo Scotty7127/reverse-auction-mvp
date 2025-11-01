@@ -7,6 +7,7 @@
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
   <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="css/orgdetail.css">
   <script>
     window.requiredRoles = ["manager"];
   </script>
@@ -28,20 +29,29 @@
     </div>
   </nav>
 
-  <main>
-    <div class="container">
-      <div class="card shadow-sm mb-3">
-        <div class="card-body">
-          <button type="button" onclick="goBack()" class="btn mb-2">← Back</button>
-          <h2 class="card-title" id="page-title">Add Organisation</h2>
-          <form id="org-form" enctype="multipart/form-data">
-            <div class="mb-3">
-              <label for="org-name">Organisation Name:</label>
-              <input type="text" id="org-name" name="name" required>
+  <main class="org-detail-page">
+    <button type="button" onclick="goBack()" class="btn-back">← Back to Organisations</button>
+
+    <div class="page-header-detail">
+      <h2 id="page-title">Add Organisation</h2>
+    </div>
+
+    <!-- Organisation Details Form -->
+    <div class="section-card">
+      <div class="section-header">
+        <h3>Organisation Details</h3>
+        <p>Configure the basic information for this organisation</p>
+      </div>
+      <div class="section-body">
+        <form id="org-form" enctype="multipart/form-data">
+          <div class="form-grid">
+            <div>
+              <label for="org-name" class="form-label">Organisation Name</label>
+              <input type="text" id="org-name" name="name" class="form-input" placeholder="Enter organisation name" required>
             </div>
-            <div class="mb-3">
-              <label for="org-currency">Currency:</label>
-              <select id="org-currency" name="currency" required>
+            <div>
+              <label for="org-currency" class="form-label">Currency</label>
+              <select id="org-currency" name="currency" class="form-select" required>
                 <option value="">Select currency</option>
                 <option value="USD">USD - US Dollar</option>
                 <option value="GBP">GBP - British Pound</option>
@@ -50,39 +60,52 @@
                 <option value="CAD">CAD - Canadian Dollar</option>
               </select>
             </div>
-            <div class="mb-3">
-              <label for="org-type">Organisation Type:</label>
-              <select id="org-type" name="type" required>
+            <div>
+              <label for="org-type" class="form-label">Organisation Type</label>
+              <select id="org-type" name="type" class="form-select" required>
                 <option value="client">Client (Buyer)</option>
                 <option value="agency">Agency (Auction Manager)</option>
                 <option value="supplier">Supplier (Bidder)</option>
               </select>
             </div>
-            <div class="mb-3">
-              <label for="org-logo">Logo:</label>
-              <input type="file" id="org-logo" name="logo" accept="image/*">
+            <div>
+              <label for="org-logo" class="form-label">Logo (Optional)</label>
+              <input type="file" id="org-logo" name="logo" class="form-input" accept="image/*">
             </div>
-            <div class="actions">
-              <button type="submit" class="btn btn-primary">Save</button>
+          </div>
+          <button type="submit" class="btn-primary-custom">Save Organisation</button>
+        </form>
+      </div>
+    </div>
+    <!-- Categories Section (Client Only) -->
+    <div id="categories-section" style="display:none;">
+      <div class="section-card">
+        <div class="section-header">
+          <h3>Categories</h3>
+          <p>Manage product categories for this client organisation</p>
+        </div>
+        <div class="section-body">
+          <form id="category-form" class="category-form">
+            <div>
+              <label for="category-name" class="form-label">Category Name</label>
+              <input type="text" id="category-name" name="name" class="form-input" placeholder="e.g., Electronics" required>
+            </div>
+            <div>
+              <label for="category-description" class="form-label">Description</label>
+              <input type="text" id="category-description" name="description" class="form-input" placeholder="e.g., Electronic components and devices" required>
+            </div>
+            <div>
+              <label class="form-label category-form-label-hidden">Action</label>
+              <button type="submit" class="btn-primary-custom">Add Category</button>
             </div>
           </form>
-        </div>
-      </div>
-      <div id="categories-section" style="display:none;">
-        <div class="card shadow-sm">
-          <div class="card-body">
-            <h2 class="section-title">Categories</h2>
-            <form id="category-form" class="mb-3">
-              <input type="text" id="category-name" name="name" placeholder="Name" required>
-              <input type="text" id="category-description" name="description" placeholder="Description" required>
-              <button type="submit" class="btn btn-primary">Add Category</button>
-            </form>
-            <table id="categories-table" class="line-items-table">
+          <div class="table-container">
+            <table id="categories-table" class="members-table">
               <thead>
                 <tr>
                   <th>Name</th>
                   <th>Description</th>
-                  <th>Actions</th>
+                  <th style="text-align: right;">Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -92,21 +115,27 @@
           </div>
         </div>
       </div>
+    </div>
 
-      <div class="card shadow-sm" id="users-section" style="display:none;">
-        <div class="card-body">
-          <h2 class="section-title">Members</h2>
-          <div class="mb-3">
-            <button class="btn btn-primary" id="invite-user-btn">Invite New User</button>
-            <button class="btn btn-secondary" id="add-existing-user-btn">Add Existing User</button>
-          </div>
-          <table id="users-table" class="line-items-table">
+    <!-- Members Section (All Organisation Types) -->
+    <div class="section-card" id="users-section" style="display:none;">
+      <div class="section-header">
+        <h3>Members</h3>
+        <p>Manage team members and their access to this organisation</p>
+      </div>
+      <div class="section-body">
+        <div class="button-group">
+          <button class="btn-primary-custom" id="invite-user-btn">Invite New User</button>
+          <button class="btn-secondary-custom" id="add-existing-user-btn">Add Existing User</button>
+        </div>
+        <div class="table-container">
+          <table id="users-table" class="members-table">
             <thead>
               <tr>
                 <th>Name</th>
                 <th>Email</th>
                 <th>Role</th>
-                <th>Actions</th>
+                <th style="text-align: right;">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -196,7 +225,7 @@
     });
 
     function goBack() {
-      window.history.back();
+      window.location.href = "organisations.html";
     }
 
     // Initialize page after successful auth
@@ -222,17 +251,17 @@
       const tbody = document.querySelector('#users-table tbody');
       tbody.innerHTML = '';
       if (!users.length) {
-        tbody.innerHTML = '<tr><td colspan="4">No users found.</td></tr>';
+        tbody.innerHTML = '<tr class="empty-row"><td colspan="4">No members yet. Add your first team member above.</td></tr>';
         return;
       }
       users.forEach(u => {
         const tr = document.createElement('tr');
         tr.innerHTML = `
-          <td>${u.first_name || ''} ${u.last_name || ''}</td>
-          <td>${u.email}</td>
-          <td>${u.role}</td>
+          <td style="font-weight: 500;">${u.first_name || ''} ${u.last_name || ''}</td>
+          <td style="color: var(--text-muted);">${u.email}</td>
+          <td><span class="role-badge ${u.role}">${u.role}</span></td>
           <td>
-            <button class="btn btn-danger btn-sm" onclick="removeUser(${u.id})">Remove</button>
+            <button class="btn-remove" onclick="removeUser(${u.id})">Remove</button>
           </td>
         `;
         tbody.appendChild(tr);
@@ -388,7 +417,7 @@
 
     function renderCategories(categories) {
       if (!categories.length) {
-        categoriesTableBody.innerHTML = '<tr><td colspan="3">No categories found.</td></tr>';
+        categoriesTableBody.innerHTML = '<tr class="empty-row"><td colspan="3">No categories yet. Add your first category above.</td></tr>';
         return;
       }
       categoriesTableBody.innerHTML = "";
@@ -397,23 +426,27 @@
 
         const nameTd = document.createElement("td");
         nameTd.textContent = cat.name;
+        nameTd.style.fontWeight = "500";
         tr.appendChild(nameTd);
 
         const descTd = document.createElement("td");
         descTd.textContent = cat.description;
+        descTd.style.color = "var(--text-muted)";
         tr.appendChild(descTd);
 
         const actionsTd = document.createElement("td");
+        actionsTd.style.textAlign = "right";
+        actionsTd.style.whiteSpace = "nowrap";
 
         const editBtn = document.createElement("button");
-        editBtn.textContent = "✏️ Edit";
-        editBtn.className = "btn btn-primary";
+        editBtn.textContent = "Edit";
+        editBtn.className = "btn-secondary-custom category-edit-btn";
         editBtn.addEventListener("click", () => startEditCategory(cat));
         actionsTd.appendChild(editBtn);
 
         const deleteBtn = document.createElement("button");
-        deleteBtn.textContent = "🗑️ Delete";
-        deleteBtn.className = "btn btn-danger";
+        deleteBtn.textContent = "Delete";
+        deleteBtn.className = "btn-remove";
         deleteBtn.addEventListener("click", () => deleteCategory(cat.id));
         actionsTd.appendChild(deleteBtn);
 
@@ -427,7 +460,9 @@
       editingCategoryId = category.id;
       categoryNameInput.value = category.name;
       categoryDescriptionInput.value = category.description;
-      categoryForm.querySelector("button[type='submit']").textContent = "💾 Save Changes";
+      const submitBtn = categoryForm.querySelector("button[type='submit']");
+      submitBtn.textContent = "Save Changes";
+      submitBtn.style.background = "#059669";
     }
 
     categoryForm.addEventListener("submit", async (e) => {
@@ -480,11 +515,13 @@
         }
         console.log("[Category Submit] Response body:", resBody);
         if (res.ok) {
-          alert(editingCategoryId ? "✅ Category updated successfully!" : "✅ Category added successfully!");
+          alert(editingCategoryId ? "Category updated successfully!" : "Category added successfully!");
           editingCategoryId = null;
           categoryNameInput.value = "";
           categoryDescriptionInput.value = "";
-          categoryForm.querySelector("button[type='submit']").textContent = "➕ Add Category";
+          const submitBtn = categoryForm.querySelector("button[type='submit']");
+          submitBtn.textContent = "Add Category";
+          submitBtn.style.background = "";
           fetchCategories();
         } else {
           let msg = "❌ Failed to save category.";
@@ -533,8 +570,8 @@
         <div class="modal-body">
           <form id="invite-user-form">
             <div class="mb-3">
-              <label for="invite-email" class="form-label">Email</label>
-              <input type="email" class="form-control" id="invite-email" required>
+              <label for="invite-email" class="form-label">Email Address</label>
+              <input type="email" class="form-control" id="invite-email" placeholder="user@example.com" required>
             </div>
             <div class="mb-3">
               <label for="invite-role" class="form-label">Role</label>
@@ -543,7 +580,7 @@
                 <option value="manager">Manager</option>
               </select>
             </div>
-            <button type="submit" class="btn btn-primary">Send Invite</button>
+            <button type="submit" class="btn btn-primary">Send Invitation</button>
           </form>
         </div>
       </div>
@@ -565,6 +602,7 @@
               <select class="form-control" id="existing-user-select" required>
                 <option value="">Select a user...</option>
               </select>
+              <div class="form-text">Choose from users who are not currently in this organisation</div>
             </div>
             <button type="submit" class="btn btn-primary">Add User</button>
           </form>
@@ -572,5 +610,10 @@
       </div>
     </div>
   </div>
+
+  <!-- Socket.IO client -->
+  <script src="/socket.io/socket.io.js"></script>
+  <!-- Enable messaging script -->
+  <script src="/messages.js"></script>
 </body>
 </html>
