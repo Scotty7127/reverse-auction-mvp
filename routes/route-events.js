@@ -902,7 +902,7 @@ module.exports = (io) => {
         [eventId]
       );
       const eventResult = await pool.query(
-        `SELECT e.auction_time, e.auction_end_time, e.type, e.title, o.name AS organisation_name, c.name AS category_name
+        `SELECT e.auction_time, e.auction_end_time, e.type, e.title, o.name AS organisation_name, o.currency, c.name AS category_name
          FROM events e
          LEFT JOIN organisations o ON e.organisation_id = o.id
          LEFT JOIN categories c ON e.category_id = c.id
@@ -922,6 +922,7 @@ module.exports = (io) => {
         title: event ? event.title : null,
         organisation_name: event ? event.organisation_name : null,
         category_name: event ? event.category_name : null,
+        currency: event ? event.currency : null,
       });
     } catch (err) {
       console.error("Error fetching stats:", err);

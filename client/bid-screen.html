@@ -37,6 +37,7 @@
 
     <!-- Auction Info (shown when auction is active) -->
     <div id="auction-info">
+      <p><strong>Currency:</strong> <span id="auction-currency">Loading...</span></p>
       <p><strong>Starts:</strong> <span id="auction-start-time">Loading...</span></p>
       <p><strong>Time left:</strong> <span id="auction-countdown">00:00:00</span></p>
       <p><strong>Status:</strong> <span id="auction-status">Loading...</span></p>
@@ -54,7 +55,7 @@
               <th>Line Item</th>
               <th>Quantity</th>
               <th>Extended Qty</th>
-              <th>New Bid</th>
+              <th>New Bid (Enter Bid)</th>
               <th>New Extended Bid</th>
               <th>Current Bid</th>
               <th>Current Extended Bid</th>
@@ -161,6 +162,7 @@
         const eventName = stats.title || 'Unnamed Event';
         document.getElementById("event-title").textContent = `${orgName} - ${catName} - ${eventName}`;
 
+        document.getElementById("auction-currency").textContent = stats.currency || "Not set";
         document.getElementById("auction-start-time").textContent = auctionStartTime ? auctionStartTime.toLocaleString() : "Not set";
         document.getElementById("auction-status").textContent = isPaused ? "Paused" : "Active";
 
